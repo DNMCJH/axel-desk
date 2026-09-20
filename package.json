@@ -1,0 +1,22 @@
+{
+  "name": "obsidian-axel-desk",
+  "version": "0.1.0",
+  "description": "Local-first Obsidian dashboard for general productivity and computer science study.",
+  "main": "main.js",
+  "scripts": {
+    "build": "node esbuild.config.js",
+    "test": "node test/public.test.js",
+    "pack": "node pack.js"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "dashboard",
+    "study"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "jsdom": "27.0.0"
+  }
+}

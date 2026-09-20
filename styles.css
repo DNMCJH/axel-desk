@@ -1,0 +1,1494 @@
+/* ==========================================================================
+   Desk — local workspace dashboard
+   --------------------------------------------------------------------------
+     1. tokens        theme variables, light + dark
+     2. reset         defeat host/theme button styling
+     3. shell         root, wash, hero, dock, footer
+     4. grid          two-column card layout, gap-free by construction
+     5. primitives    rows, bars, metrics, progress, tags, empty states
+     6. card extras   only what a card needs beyond the primitives
+     7. responsive    narrow-pane collapse
+   ========================================================================== */
+
+.workspace-leaf-content[data-type="desk-home"] .view-header { display: none; }
+.workspace-leaf-content[data-type="desk-home"] .view-content {
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--desk-bg, #faf9f7);
+}
+
+/* -- 1. tokens ----------------------------------------------------------- */
+
+.desk-root {
+  /* warm light palette */
+  --desk-bg: #faf9f7;
+  --desk-card: #fffefc;
+  --desk-line: #e7e3dd;
+  --desk-line-soft: #f1ede7;
+  --desk-ink: #242321;
+  --desk-ink-mid: #5d574e;
+  --desk-ink-soft: #8b857c;
+  --desk-ink-faint: #aaa49b;
+  --desk-accent: #2f6f5e;
+  --desk-accent-soft: #e8f2ee;
+  --desk-warn: #b4552a;
+  --desk-warn-soft: #fbeee6;
+  --desk-alert: #a63232;
+  --desk-alert-soft: #fbebeb;
+  --desk-radius: 18px;
+  --desk-radius-sm: 10px;
+  --desk-gap: 16px;
+  /* Grid columns. Overridden by the column-count setting; the layout solver reads
+     the same number so its gap-free planning matches what CSS actually renders. */
+  --desk-cols: 2;
+  /* Set inline by the view when the user points at a vault image. Declared here
+     so the hero rule resolves to "no image" instead of an invalid value. */
+  --desk-hero-image: none;
+  /* Minimum gallery tile width; the card overrides it inline so fewer images show
+     bigger. Declared here so the grid still works if that inline value is absent. */
+  --desk-shot-min: 150px;
+
+  position: relative;
+  min-height: 100%;
+  padding: 0;
+  background: var(--desk-bg);
+  color: var(--desk-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  /* Ambient washes extend beyond the visual edge; clip paint without creating a horizontal scroller. */
+  overflow-x: clip;
+}
+
+.theme-dark .desk-root {
+  --desk-bg: #17181a;
+  --desk-card: #1e2023;
+  --desk-line: #2e3136;
+  --desk-line-soft: #26282c;
+  --desk-ink: #e9e7e3;
+  --desk-ink-mid: #a8a39b;
+  --desk-ink-soft: #837e76;
+  --desk-ink-faint: #6a655e;
+  --desk-accent: #6fbfa4;
+  --desk-accent-soft: #1e2b27;
+  --desk-warn: #e29464;
+  --desk-warn-soft: #2c231d;
+  --desk-alert: #e07a7a;
+  --desk-alert-soft: #2c1f1f;
+}
+
+/* -- 2. reset ------------------------------------------------------------ */
+
+/* Obsidian core (app.css) gives every <button> its own background, padding,
+   border-radius and box-shadow, and themes stack more on top. Every button here
+   is custom-drawn, so reset hard and opt back in per component — otherwise
+   inherited padding silently inflates tab strips, task rows and date cells.
+   `all: unset` also clears `display`, so components needing flex/grid must
+   re-declare it below. */
+.desk-root button {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.desk-root button:focus-visible {
+  outline: 2px solid var(--desk-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/**
+ * Inline-element colour floor.
+ *
+ * The dashboard builds its rows from bare `<strong>`, `<em>`, `<small>`, `<b>`
+ * and `<i>` elements, and it never declared a colour on most of them — so any
+ * theme or user snippet with an unscoped `strong, b { color: … }` repaints the
+ * entire UI. That is exactly what happened: a CSS snippet in this vault turned
+ * every task title pink, and no test could see it because the suites load only
+ * this stylesheet.
+ *
+ * `inherit` rather than a fixed colour: each component already sets the right
+ * colour on its container (muted for meta, alert for overdue, faint for done), and
+ * inheriting keeps all of that working while cutting the theme out of the chain.
+ * Specificity beats a bare `strong, b` selector, so this wins without !important.
+ *
+ * Components that genuinely need their own colour still declare it after this
+ * block and override it normally.
+ */
+.desk-root strong,
+.desk-root b,
+.desk-root em,
+.desk-root i,
+.desk-root small,
+.desk-root span,
+.desk-root h2,
+.desk-root h3,
+.desk-root p {
+  color: inherit;
+  font-family: inherit;
+}
+/* Themes also style bare `code`, which the missing-folder hint uses. */
+.desk-root code {
+  color: inherit;
+  background: var(--desk-line-soft);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.desk-root *,
+.desk-root *::before,
+.desk-root *::after { box-sizing: border-box; }
+
+.desk-root h1,
+.desk-root h2 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.desk-root p { margin: 0; }
+
+.desk-root code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--desk-line-soft);
+  font-size: 0.9em;
+  font-family: var(--font-monospace, monospace);
+}
+.desk-root pre {
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  border-radius: var(--desk-radius-sm);
+  border: 1px solid var(--desk-line);
+  background: var(--desk-line-soft);
+  overflow-x: auto;
+}
+.desk-root pre code {
+  padding: 0;
+  background: none;
+  font-size: 11.5px;
+  line-height: 1.65;
+  white-space: pre;
+}
+
+/* -- 3. shell ------------------------------------------------------------ */
+
+/**
+ * Ambient colour washes.
+ *
+ * Measured, not guessed: the first version multiplied a 0.16 alpha by
+ * `opacity: 0.5` and then blurred it across 380px, giving a peak of 0.08 alpha —
+ * about two shades on a near-white background, i.e. invisible. Two of the three
+ * were also parked mostly off-canvas (`right: -80px`, `left: -140px`), and the
+ * third sat at y=3342 on a real render, below anything anyone would scroll to.
+ *
+ * Now: stronger alpha, no compounding opacity, and positions that keep a
+ * meaningful arc of each circle inside the viewport.
+ */
+.desk-wash {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  pointer-events: none;
+  z-index: 0;
+}
+.desk-wash-one {
+  top: -110px; right: -40px;
+  width: 420px; height: 420px;
+  background: radial-gradient(circle, rgba(47, 111, 94, 0.5), rgba(47, 111, 94, 0.12) 55%, transparent 72%);
+}
+.desk-wash-two {
+  top: 220px; left: -90px;
+  width: 340px; height: 340px;
+  background: radial-gradient(circle, rgba(180, 85, 42, 0.38), rgba(180, 85, 42, 0.1) 55%, transparent 72%);
+}
+/* Anchored to the hero band rather than the document bottom: `bottom` on a tall
+   scrolling page put this one 3000px down, where it decorated nothing. */
+.desk-wash-three {
+  top: 620px; right: -70px;
+  width: 320px; height: 320px;
+  background: radial-gradient(circle, rgba(47, 111, 94, 0.3), rgba(47, 111, 94, 0.08) 58%, transparent 74%);
+}
+/* Dark mode needs less: the same alpha over a dark ground reads as haze. */
+.theme-dark .desk-wash-one { background: radial-gradient(circle, rgba(72, 158, 133, 0.34), transparent 70%); }
+.theme-dark .desk-wash-two { background: radial-gradient(circle, rgba(214, 112, 62, 0.26), transparent 72%); }
+.theme-dark .desk-wash-three { background: radial-gradient(circle, rgba(72, 158, 133, 0.2), transparent 74%); }
+
+/**
+ * Decoration, done with CSS only.
+ *
+ * No bundled images and no remote ones: a community plugin package is main.js +
+ * manifest.json + styles.css, so images would either bloat the bundle or be
+ * loaded over the network — and "local only, never connects" is this plugin's
+ * main promise. Gradients and textures cost zero bytes and cannot leak anything.
+ *
+ * A user's own image is a different matter: `--desk-hero-image` can point at a
+ * vault file (set in settings), which stays local.
+ */
+/* Hairline accent under the greeting, fading out — cheap sense of craft. */
+.desk-hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 92px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--desk-accent), transparent);
+}
+
+/* Optional background image, read from the vault. Applied as a custom property
+   so an unset value simply renders nothing. */
+.desk-hero.has-image {
+  background-image: var(--desk-hero-image);
+  background-size: cover;
+  background-position: center;
+  border-radius: var(--desk-radius);
+  padding: 22px 24px;
+  overflow: hidden;
+}
+/* Scrim: user photos have arbitrary brightness, and unreadable text is worse
+   than no decoration. */
+.desk-hero.has-image::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, var(--desk-bg) 12%, rgba(255, 255, 255, 0.72) 58%, rgba(255, 255, 255, 0.3));
+  z-index: 0;
+}
+.theme-dark .desk-hero.has-image::before {
+  background: linear-gradient(105deg, var(--desk-bg) 12%, rgba(23, 24, 26, 0.78) 58%, rgba(23, 24, 26, 0.35));
+}
+.desk-hero.has-image > * { position: relative; z-index: 1; }
+.desk-hero.has-image::after { left: 24px; bottom: 14px; }
+
+/* Card hover: a slight lift reads as "interactive" without animation cost. */
+.desk-card {
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.desk-card:hover {
+  border-color: var(--desk-line);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 8px 24px -12px rgba(0, 0, 0, 0.08);
+}
+.theme-dark .desk-card:hover {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px -12px rgba(0, 0, 0, 0.4);
+}
+
+.desk-shell {
+  position: relative;
+  z-index: 1;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 30px 26px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* hero */
+.desk-hero {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--desk-line-soft);
+}
+.desk-hero > div:first-child { min-width: 0; flex: 1 1 320px; }
+.desk-kicker {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--desk-ink-faint);
+  margin-bottom: 6px;
+}
+.desk-hero h1 {
+  font-size: 27px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.desk-hero p {
+  margin-top: 5px;
+  font-size: 12.5px;
+  color: var(--desk-ink-soft);
+}
+.desk-hero .desk-focus {
+  margin-top: 9px;
+  padding-left: 11px;
+  border-left: 2px solid var(--desk-accent);
+  color: var(--desk-ink-mid);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.desk-hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 9px;
+  min-width: 0;
+}
+.desk-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--desk-ink-soft);
+}
+.desk-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--desk-accent);
+  flex: 0 0 auto;
+}
+.desk-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.desk-pills span {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--desk-line);
+  background: var(--desk-card);
+  font-size: 11px;
+  color: var(--desk-ink-mid);
+  white-space: nowrap;
+}
+.desk-pills span.is-warn {
+  border-color: transparent;
+  background: var(--desk-warn-soft);
+  color: var(--desk-warn);
+  font-weight: 600;
+}
+.desk-pills span.is-muted { color: var(--desk-ink-faint); }
+
+/* small head button, shared by hero and every card head */
+.desk-root .desk-head-btn {
+  display: inline-block;
+  padding: 4px 11px;
+  border: 1px solid var(--desk-line);
+  border-radius: 999px;
+  background: var(--desk-card);
+  font-size: 11.5px;
+  color: var(--desk-ink-mid);
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s;
+}
+.desk-root .desk-head-btn:hover {
+  border-color: var(--desk-accent);
+  color: var(--desk-accent);
+}
+
+/* dock */
+.desk-dock {
+  padding: 18px 20px 20px;
+  border: 1px solid var(--desk-line);
+  border-radius: var(--desk-radius);
+  background: var(--desk-card);
+}
+.desk-dock-head { margin-bottom: 14px; }
+.desk-dock-head span {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--desk-ink-faint);
+}
+.desk-dock-head h2 { margin-top: 3px; font-size: 15px; }
+.desk-dock-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 9px;
+}
+.desk-root .desk-dock-grid button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--desk-line);
+  border-radius: var(--desk-radius-sm);
+  background: transparent;
+  transition: border-color 0.15s, background 0.15s;
+}
+.desk-root .desk-dock-grid button:hover {
+  border-color: var(--desk-accent);
+  background: var(--desk-accent-soft);
+}
+.desk-dock-grid button i {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--desk-ink-faint);
+  letter-spacing: 0.04em;
+}
+.desk-dock-grid button > span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.desk-dock-grid button strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-dock-grid button small {
+  font-size: 11px;
+  color: var(--desk-ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-dock-grid button b {
+  flex: 0 0 auto;
+  font-weight: 400;
+  color: var(--desk-ink-faint);
+}
+
+/* footer */
+.desk-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  font-size: 11px;
+  color: var(--desk-ink-faint);
+  letter-spacing: 0.03em;
+}
+
+/* -- 4. grid ------------------------------------------------------------- */
+
+/* Row height is shared (`align-items: stretch`, the default) so a tall card never
+   leaves a blank column beside it. The cost is that a short card gets stretched,
+   which moves the emptiness *inside* the card — measured at 301px of dead space
+   in one 577px card. The fix is not to stop stretching, but to make the stretched
+   height go somewhere useful:
+
+     - a card with a scrollable list marks it `.desk-fill` and the list grows to
+       take the slack, showing more rows instead of blank space
+     - a card whose content is genuinely fixed (an empty state, a 4-step
+       checklist) marks itself `.desk-card.is-compact` and opts out of stretching,
+       sitting at its natural height at the top of its row
+
+   `--desk-cols` lets the user pick 1/2/3 columns; the solver reads the same
+   number so its gap-free planning stays correct. */
+.desk-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--desk-cols, 2), minmax(0, 1fr));
+  gap: var(--desk-gap);
+  align-items: stretch;
+}
+/* Opt out of row stretching: the card keeps its content height. */
+.desk-card.is-compact { align-self: start; }
+
+.desk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--desk-line);
+  border-radius: var(--desk-radius);
+  background: var(--desk-card);
+}
+/* Placement comes from the solver's computed column count, so the same rules work
+   at 1, 2 or 3 columns. `is-half`/`is-full` remain as stable hooks for user CSS. */
+.desk-card.desk-span-1 { grid-column: span 1; }
+.desk-card.desk-span-2 { grid-column: span 2; }
+.desk-card.desk-span-3 { grid-column: span 3; }
+.desk-card.is-error { border-color: var(--desk-alert); }
+
+/* A trailing sub-section is pushed to the bottom so paired cards align. */
+.desk-card > .desk-sub:last-child { margin-top: auto; }
+
+.desk-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.desk-card-head > div:first-child { min-width: 0; flex: 1 1 auto; }
+.desk-card-head span {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--desk-ink-faint);
+}
+.desk-card-head h2 {
+  margin-top: 3px;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.desk-count {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--desk-line-soft);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--desk-ink-mid);
+  white-space: nowrap;
+}
+
+.desk-sub { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+/* A sub-section containing the filling element must grow too, or the fill has no
+   space to expand into and the card keeps dead height below it. Set in JS at
+   render time (`is-growing`) rather than with CSS `:has()`, for the same
+   Chromium-version reason as elsewhere. */
+.desk-sub.is-growing { flex: 1 1 auto; }
+.desk-sub-head {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--desk-ink-faint);
+  padding-top: 10px;
+  border-top: 1px solid var(--desk-line-soft);
+}
+
+/* -- 5. primitives ------------------------------------------------------- */
+
+/* segmented control; wraps rather than overflowing a half-width card */
+.desk-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 12px;
+  background: var(--desk-line-soft);
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.desk-root .desk-switch button {
+  display: block;
+  padding: 4px 9px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  color: var(--desk-ink-soft);
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.desk-root .desk-switch button:hover { color: var(--desk-ink); }
+.desk-root .desk-switch button.is-active {
+  background: var(--desk-card);
+  color: var(--desk-ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* the shared clickable row: icon, body, optional badge */
+.desk-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.desk-root .desk-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: var(--desk-radius-sm);
+  transition: background 0.12s;
+}
+.desk-root .desk-row:hover { background: var(--desk-line-soft); }
+.desk-row > i {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 5px;
+  background: var(--desk-line-soft);
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--desk-ink-soft);
+  padding: 0 3px;
+}
+.desk-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.desk-row-body strong {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  /* two lines then ellipsis: full truncation loses the point of a task title */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.desk-row-body small {
+  font-size: 11px;
+  color: var(--desk-ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-root .desk-row-toggle {
+  flex: 0 0 auto;
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border: 1.5px solid var(--desk-ink-faint);
+  border-radius: 5px;
+  background: transparent;
+}
+.desk-root .desk-row-toggle:hover {
+  border-color: var(--desk-accent);
+  background: var(--desk-accent-soft);
+}
+.desk-root .desk-row-main {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+.desk-row.is-due .desk-row-toggle,
+.desk-row.is-stale .desk-row-toggle { border-color: var(--desk-warn); }
+.desk-row.is-blocker .desk-row-toggle { border-color: var(--desk-alert); }
+
+.desk-row-badge {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--desk-ink-faint);
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+/* row tones */
+.desk-row.is-due > i { background: var(--desk-warn-soft); color: var(--desk-warn); }
+.desk-row.is-blocker > i { background: var(--desk-alert-soft); color: var(--desk-alert); }
+.desk-row.is-blocker .desk-row-badge { color: var(--desk-alert); font-weight: 600; }
+.desk-row.is-stale > i { background: var(--desk-warn-soft); color: var(--desk-warn); }
+.desk-row.is-stale .desk-row-badge { color: var(--desk-warn); font-weight: 600; }
+.desk-row.is-hot > i { background: var(--desk-accent-soft); color: var(--desk-accent); }
+.desk-row.is-cold > i { opacity: 0.6; }
+
+/* checkable task row */
+.desk-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 6px 9px;
+  border-radius: var(--desk-radius-sm);
+  transition: background 0.12s;
+}
+.desk-task:hover { background: var(--desk-line-soft); }
+.desk-root .desk-check {
+  flex: 0 0 auto;
+  display: block;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  border: 1.5px solid var(--desk-ink-faint);
+  border-radius: 5px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.desk-root .desk-check:hover { border-color: var(--desk-accent); }
+.desk-root .desk-check.is-on {
+  border-color: var(--desk-accent);
+  background: var(--desk-accent);
+}
+.desk-root .desk-task-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: left;
+}
+.desk-task-body strong {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.desk-task-body small {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--desk-ink-soft);
+}
+.desk-task-body small em {
+  font-style: normal;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--desk-line-soft);
+}
+.desk-task-body small em.is-overdue {
+  background: var(--desk-alert-soft);
+  color: var(--desk-alert);
+  font-weight: 600;
+}
+.desk-task-body small em.is-today {
+  background: var(--desk-warn-soft);
+  color: var(--desk-warn);
+  font-weight: 600;
+}
+.desk-task-body small em.is-waiting {
+  background: var(--desk-accent-soft);
+  color: var(--desk-accent);
+}
+.desk-sep { color: var(--desk-ink-faint); }
+.desk-task-src {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+.desk-task.is-done .desk-task-body strong {
+  text-decoration: line-through;
+  color: var(--desk-ink-faint);
+}
+/* priority marker on the left edge */
+.desk-task.desk-p-high { box-shadow: inset 2px 0 0 var(--desk-alert); }
+.desk-task.desk-p-medium { box-shadow: inset 2px 0 0 var(--desk-warn); }
+.desk-task.is-waiting .desk-task-body strong { color: var(--desk-ink-mid); }
+
+/* blocker rows: closable in place, and honest about what is unrecorded */
+.desk-blocker { box-shadow: inset 2px 0 0 var(--desk-alert); }
+.desk-blocker.is-stale { box-shadow: inset 2px 0 0 var(--desk-ink-faint); }
+/* Stale means "nobody has touched this in a month" — mute it so it reads as a
+   decision to make, not as today's work, while staying legible. */
+.desk-blocker.is-stale .desk-task-body strong { color: var(--desk-ink-mid); }
+.desk-root .desk-blocker .desk-check { border-radius: 5px; }
+.desk-task-body small em.is-unknown {
+  background: var(--desk-line-soft);
+  color: var(--desk-ink-soft);
+  font-style: italic;
+}
+.desk-task-age { color: var(--desk-ink-faint); font-size: 10.5px; }
+.desk-task-age.is-stale { color: var(--desk-warn); font-weight: 600; }
+/* The obsolete action is de-emphasised until hover: it writes to a note, so it
+   should not look like a casual click, but it must not need a menu either. */
+.desk-root .desk-row-x {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  color: var(--desk-ink-soft);
+  background: transparent;
+  /* Faded, NOT opacity:0. A hover-only control is unreachable on a touch device —
+     there is no hover on a phone, so `opacity: 0` would make this feature simply
+     not exist there while still passing every desktop test. */
+  opacity: 0.45;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.desk-task:hover .desk-row-x, .desk-root .desk-row-x:focus-visible { opacity: 1; }
+/* Touch and coarse pointers get it at full strength permanently. */
+@media (hover: none), (pointer: coarse) {
+  .desk-root .desk-row-x {
+    opacity: 1;
+    /* Also give it a real tap target; 10.5px text is not one. */
+    padding: 6px 10px;
+    background: var(--desk-line-soft);
+  }
+}
+.desk-root .desk-row-x:hover {
+  color: var(--desk-warn);
+  background: var(--desk-warn-soft);
+}
+
+/* bars */
+.desk-bars-plain { display: flex; flex-direction: column; gap: 5px; }
+.desk-bar-row {
+  display: grid;
+  grid-template-columns: minmax(52px, 88px) 1fr auto;
+  align-items: center;
+  gap: 9px;
+  font-size: 11.5px;
+}
+.desk-bar-row > span {
+  color: var(--desk-ink-mid);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-bar-row > div {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--desk-line-soft);
+  overflow: hidden;
+  min-width: 0;
+}
+.desk-bar-row > div > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--desk-accent);
+  opacity: 0.75;
+}
+.desk-bar-row > b {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--desk-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* metric tiles */
+.desk-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+.desk-metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px 11px;
+  border-radius: var(--desk-radius-sm);
+  background: var(--desk-line-soft);
+  min-width: 0;
+}
+.desk-metrics b {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.desk-metrics span {
+  font-size: 10.5px;
+  color: var(--desk-ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-metrics > div.is-warn { background: var(--desk-warn-soft); }
+.desk-metrics > div.is-warn b { color: var(--desk-warn); }
+
+/* progress */
+.desk-progress { display: flex; flex-direction: column; gap: 5px; }
+.desk-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--desk-ink-mid);
+}
+.desk-progress-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desk-progress-head b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.desk-progress-track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--desk-line-soft);
+  overflow: hidden;
+}
+.desk-progress-track > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--desk-accent);
+}
+.desk-progress.is-warn .desk-progress-track > i { background: var(--desk-warn); }
+
+/* tags */
+.desk-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.desk-tags em {
+  font-style: normal;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--desk-line-soft);
+  font-size: 11px;
+  color: var(--desk-ink-mid);
+}
+.desk-tags.is-fresh em {
+  background: var(--desk-accent-soft);
+  color: var(--desk-accent);
+  font-weight: 500;
+}
+
+/* empty states, notes and hints */
+.desk-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 2px;
+  font-size: 12px;
+  color: var(--desk-ink-soft);
+  overflow-wrap: anywhere;
+}
+.desk-empty em { font-style: normal; color: var(--desk-ink-faint); font-size: 11.5px; }
+
+.desk-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--desk-ink-faint);
+  overflow-wrap: anywhere;
+}
+.desk-root .desk-note button {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--desk-line);
+  border-radius: 999px;
+  font-size: 10.5px;
+  color: var(--desk-ink-soft);
+}
+.desk-root .desk-note button:hover { border-color: var(--desk-accent); color: var(--desk-accent); }
+
+.desk-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 13px;
+  border: 1px dashed var(--desk-line);
+  border-radius: var(--desk-radius-sm);
+  font-size: 12px;
+  color: var(--desk-ink-mid);
+  overflow-wrap: anywhere;
+}
+.desk-hint-alt { color: var(--desk-ink-faint); font-size: 11.5px; }
+.desk-root .desk-hint .desk-head-btn { align-self: flex-start; margin-top: 4px; }
+
+/* editable cards */
+.desk-root .desk-scratch {
+  /* textarea needs the same hard reset as button: themes style it heavily */
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  padding: 11px 13px;
+  border: 1px solid var(--desk-line);
+  border-radius: var(--desk-radius-sm);
+  background: var(--desk-bg);
+  color: var(--desk-ink);
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.6;
+  resize: none;               /* the card's height governs; a drag handle fights it */
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+.desk-root .desk-scratch:focus {
+  outline: none;
+  border-color: var(--desk-accent);
+  background: var(--desk-card);
+}
+.desk-root .desk-scratch::placeholder {
+  color: var(--desk-ink-faint);
+  opacity: 1;
+}
+
+/* -- 6. card extras ------------------------------------------------------ */
+
+/**
+ * The visual card.
+ *
+ * `auto-fill` with a min tile width rather than a fixed column count: the card is
+ * full-width and the pane can be anything from a phone to an ultrawide, so the
+ * grid has to reflow on its own. `aspect-ratio` on the tile keeps every frame the
+ * same shape regardless of the source image, which is what makes a folder of
+ * mixed screenshots and artwork read as a wall instead of a pile.
+ */
+.desk-shots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--desk-shot-min, 150px), 1fr));
+  gap: 10px;
+}
+.desk-root .desk-shot {
+  position: relative;
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--desk-radius-sm);
+  /* Images sit edge-to-edge. A tinted backing or inset hairline becomes a
+     visible beige frame around pale images, which defeats the wall effect. */
+  background: transparent;
+  box-shadow: none;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.desk-root .desk-shot:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.13);
+  z-index: 1;
+}
+.desk-shot-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* cover, not contain: uniform frames matter more than seeing every edge, and a
+     click opens the full image anyway. */
+  object-fit: cover;
+  transition: transform 0.35s ease;
+}
+.desk-shot:hover .desk-shot-img { transform: scale(1.04); }
+.desk-shot-missing {
+  display: flex;
+  background: var(--desk-line-soft);
+  box-shadow: inset 0 0 0 1px var(--desk-line);
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--desk-ink-faint);
+  font-size: 11px;
+}
+/* Caption sits on the image under a scrim: keeps tiles uniform, and a long
+   filename cannot push the grid out of alignment. */
+.desk-shot-cap {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 9px 7px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), transparent);
+  opacity: 0;
+  transition: opacity 0.16s;
+}
+.desk-shot:hover .desk-shot-cap,
+.desk-root .desk-shot:focus-visible .desk-shot-cap { opacity: 1; }
+/* Touch devices have no hover, so the caption would never appear. */
+@media (hover: none), (pointer: coarse) {
+  .desk-shot-cap { opacity: 1; }
+}
+.desk-shot-cap strong {
+  font-size: 11px;
+  font-weight: 500;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-shot-cap small {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.8);
+}
+/* Unconfigured state: an offer, not a dead end. */
+.desk-gallery-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--desk-ink-mid);
+}
+.desk-gallery-setup em { font-style: normal; color: var(--desk-ink-faint); font-size: 11.5px; }
+.desk-gallery-picks { display: flex; flex-wrap: wrap; gap: 7px; }
+.desk-gallery-browser {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+.desk-gallery-control {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.desk-gallery-select,
+.desk-gallery-input {
+  min-width: 0;
+  flex: 1 1 260px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--desk-line);
+  border-radius: 10px;
+  color: var(--desk-ink);
+  background: var(--desk-card);
+  font: inherit;
+}
+.desk-gallery-browser small { color: var(--desk-ink-faint); }
+.desk-gallery-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--desk-ink-faint);
+  font-size: 11.5px;
+}
+.desk-gallery-nav span { min-width: 190px; text-align: center; }
+@media (max-width: 520px) {
+  .desk-gallery-control { align-items: stretch; flex-direction: column; }
+  .desk-gallery-select, .desk-gallery-input { flex-basis: auto; width: 100%; }
+  .desk-gallery-nav span { order: -1; width: 100%; }
+}
+
+/* The element that absorbs a stretched card's spare height.
+   Per-card max-heights used to live here; they were the reason a stretched card
+   showed blank space instead of more rows. A `.desk-fill` list has no ceiling of
+   its own — the card's height is the ceiling, and the list scrolls past it. */
+.desk-card .desk-fill {
+  flex: 1 1 auto;
+  min-height: 0;      /* required, or a flex child refuses to shrink below content */
+  overflow-y: auto;
+}
+/* A filling list must not grow without limit, or one long list sets the row height
+   for its partner too — measured at 1008px, which pushes the partner's content off
+   screen. The cap is viewport-relative rather than a fixed pixel value, so a taller
+   pane really does show more rows instead of stopping at an arbitrary height, which
+   is the whole point of filling. `--desk-card-max` can be overridden per template
+   or by the user. */
+.desk-root { --desk-card-max: 72vh; }
+.desk-card { max-height: var(--desk-card-max); }
+/* A card spanning the full grid width holds more, so allow it a little more room. */
+/* A card spanning the whole grid width holds more, so give it more room. Keyed on
+   a data attribute rather than sniffing the inline style string, which broke as
+   soon as the property was written differently. */
+.desk-grid[data-cols="2"] .desk-card.desk-span-2,
+.desk-grid[data-cols="3"] .desk-card.desk-span-3 { max-height: calc(var(--desk-card-max) + 8vh); }
+/* A compact card is already at its content height; a cap would only clip it. */
+.desk-card.is-compact { max-height: none; }
+/* No min-height here: reserving space for rows that do not exist is exactly the
+   blank-space problem. An empty list shows its empty state and the card shrinks. */
+.desk-card-today .desk-task-list { display: flex; flex-direction: column; gap: 1px; }
+
+/* An empty filling list still occupies the card's spare height (so the row stays
+   even), but its message sits at the top rather than floating in the middle of a
+   tall empty box. */
+.desk-card .desk-row-list.is-empty {
+  display: block;
+  overflow: hidden;
+}
+.desk-card .desk-row-list.is-empty > .desk-empty { padding-top: 6px; }
+
+/* A trailing section pins to the bottom only when nothing above it is filling.
+   The `.has-fill` class is set in JS at render time rather than using CSS `:has()`,
+   which needs Chromium 105+ and this plugin declares support for older Obsidian
+   builds than that. */
+.desk-card > .desk-sub:last-child { margin-top: auto; }
+.desk-card.has-fill > .desk-sub:last-child { margin-top: 0; }
+
+/* The calendar's month grid is fixed-size, so its day detail takes the slack. */
+.desk-card-calendar .desk-day-detail { flex: 1 1 auto; min-height: 0; }
+.desk-card-calendar .desk-day-rows { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
+/* The heat card is full-width, so it never shares a row — it only needs its
+   horizontal scroll contained, which .desk-heat-scroll already does. */
+.desk-card-heat { overflow: hidden; }
+.desk-card-code .desk-row-list { max-height: 200px; }
+
+/* calendar */
+.desk-weekdays,
+.desk-month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+.desk-weekdays span {
+  text-align: center;
+  font-size: 10px;
+  color: var(--desk-ink-faint);
+  padding-bottom: 2px;
+}
+.desk-root .desk-month button,
+.desk-month .is-blank {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  min-height: 26px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  color: var(--desk-ink-mid);
+  transition: background 0.12s, color 0.12s;
+}
+/* Trailing blanks keep the final row rectangular instead of ragged. */
+.desk-month .is-blank { background: var(--desk-line-soft); opacity: 0.35; }
+.desk-month button b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.desk-root .desk-month button:hover { background: var(--desk-line-soft); }
+.desk-month button.has-note { background: var(--desk-line-soft); }
+.desk-month button.has-report { color: var(--desk-accent); font-weight: 600; }
+.desk-month button.is-today {
+  box-shadow: inset 0 0 0 1.5px var(--desk-accent);
+  color: var(--desk-accent);
+  font-weight: 600;
+}
+.desk-month button.is-selected {
+  background: var(--desk-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.desk-month button.is-selected b { color: #fff; }
+.desk-month button i {
+  position: absolute;
+  top: 1px; right: 3px;
+  font-style: normal;
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--desk-warn);
+}
+.desk-month button.is-selected i { color: #fff; }
+.desk-month button u {
+  position: absolute;
+  bottom: 3px;
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: var(--desk-ink-faint);
+  text-decoration: none;
+}
+.desk-month button.is-selected u { background: rgba(255, 255, 255, 0.8); }
+
+.desk-day-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 11px;
+  border-top: 1px solid var(--desk-line-soft);
+}
+.desk-day-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+}
+.desk-day-head > div { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.desk-day-head span {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--desk-ink-faint);
+}
+.desk-day-head strong { font-size: 13px; font-weight: 600; }
+.desk-day-rows { max-height: 200px; }
+
+/* daily-report streak strip */
+.desk-streak {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18px, 1fr));
+  gap: 3px;
+}
+.desk-root .desk-streak button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  min-height: 20px;
+  border-radius: 6px;
+  font-size: 10px;
+  background: var(--desk-line-soft);
+  color: var(--desk-ink-faint);
+  transition: transform 0.12s;
+}
+.desk-root .desk-streak button:hover { transform: translateY(-1px); }
+.desk-streak button.is-report {
+  background: var(--desk-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.desk-streak button.is-note { background: var(--desk-accent-soft); color: var(--desk-accent); }
+.desk-streak button.is-missing { background: var(--desk-line-soft); }
+.desk-streak button.is-missing.is-weekend { opacity: 0.45; }
+.desk-streak button.is-today { box-shadow: inset 0 0 0 1.5px var(--desk-ink-mid); }
+.desk-streak-note { font-size: 11px; color: var(--desk-ink-faint); }
+
+/* heat map */
+.desk-heat-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.desk-heat-grid { display: flex; gap: 3px; min-width: max-content; }
+.desk-heat-col { display: flex; flex-direction: column; gap: 3px; }
+.desk-heat-cell {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: var(--desk-line-soft);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.desk-heat-cell.is-future { background: transparent; cursor: default; }
+.desk-heat-cell.is-l0 { background: var(--desk-line-soft); }
+.desk-heat-cell.is-l1 { background: var(--desk-accent); opacity: 0.25; }
+.desk-heat-cell.is-l2 { background: var(--desk-accent); opacity: 0.45; }
+.desk-heat-cell.is-l3 { background: var(--desk-accent); opacity: 0.7; }
+.desk-heat-cell.is-l4 { background: var(--desk-accent); opacity: 1; }
+.desk-heat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--desk-ink-faint);
+}
+.desk-heat-legend i {
+  width: 9px; height: 9px;
+  border-radius: 2px;
+  background: var(--desk-accent);
+}
+.desk-heat-legend i.is-l0 { background: var(--desk-line-soft); }
+.desk-heat-legend i.is-l1 { opacity: 0.25; }
+.desk-heat-legend i.is-l2 { opacity: 0.45; }
+.desk-heat-legend i.is-l3 { opacity: 0.7; }
+.desk-heat-legend em { margin-left: auto; font-style: normal; }
+
+
+
+/* Recycle bin: peripheral, but reachable whenever Desk is open. */
+.desk-root .desk-recycle-button {
+  position: fixed;
+  right: 24px;
+  bottom: 20px;
+  z-index: 25;
+  padding: 7px 13px;
+  border: 1px solid var(--desk-line);
+  border-radius: 999px;
+  background: var(--desk-card);
+  color: var(--desk-ink-soft);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  opacity: 0.76;
+}
+.desk-root .desk-recycle-button:hover,
+.desk-root .desk-recycle-button:focus-visible { opacity: 1; color: var(--desk-accent); }
+.desk-recycle-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(20, 20, 20, 0.16);
+}
+.desk-recycle-drawer {
+  width: min(430px, 92vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  background: var(--desk-card);
+  border-left: 1px solid var(--desk-line);
+  box-shadow: -16px 0 44px rgba(0, 0, 0, 0.14);
+  overflow-y: auto;
+}
+.desk-recycle-head,
+.desk-recycle-footer,
+.desk-recycle-actions,
+.desk-recycle-tabs { display: flex; align-items: center; gap: 8px; }
+.desk-recycle-head { justify-content: space-between; }
+.desk-recycle-head span { font-size: 10px; letter-spacing: 0.12em; color: var(--desk-ink-faint); }
+.desk-recycle-head h2 { font-size: 20px; }
+.desk-recycle-tabs { padding: 4px; border-radius: 12px; background: var(--desk-line-soft); }
+.desk-root .desk-recycle-tabs button { flex: 1 1 0; padding: 7px 10px; text-align: center; border-radius: 9px; color: var(--desk-ink-soft); }
+.desk-root .desk-recycle-tabs button.is-active { background: var(--desk-card); color: var(--desk-ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+.desk-recycle-note { font-size: 11.5px; color: var(--desk-ink-soft); }
+.desk-recycle-list { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.desk-recycle-item { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--desk-line-soft); border-radius: 12px; }
+.desk-recycle-item-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.desk-recycle-item-main > span { font-size: 10px; color: var(--desk-ink-faint); }
+.desk-recycle-item-main > strong { font-size: 12.5px; overflow-wrap: anywhere; }
+.desk-recycle-item-main > small { font-size: 10.5px; color: var(--desk-ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desk-recycle-actions { flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+.desk-recycle-footer { justify-content: flex-end; margin-top: auto; padding-top: 8px; border-top: 1px solid var(--desk-line-soft); }
+.desk-recycle-empty { padding: 28px 14px; text-align: center; color: var(--desk-ink-faint); }
+@media (max-width: 520px) {
+  .desk-root .desk-recycle-button { right: 12px; bottom: 12px; }
+  .desk-recycle-drawer { width: 100%; padding: 18px 14px; }
+  .desk-recycle-item { align-items: flex-start; flex-direction: column; }
+  .desk-recycle-actions { width: 100%; justify-content: flex-start; }
+}
+
+/* -- 7. responsive ------------------------------------------------------- */
+
+/**
+ * Narrow layouts key off `[data-pane]`, which the view sets from the PANE's width.
+ *
+ * A media query measures the window, and this view lives in a split — so with a
+ * wide window and a 600px pane, `max-width: 900px` never fires and two columns
+ * stay crammed into half a pane, wrapping task titles after four characters.
+ * That was the reported bug, and no window-based query can fix it.
+ *
+ * The media queries below are kept as a fallback for a genuinely small window
+ * (mobile, tiny laptop), where they agree with the attribute anyway.
+ */
+.desk-root[data-pane="narrow"] .desk-grid,
+.desk-root[data-pane="narrow"] .desk-grid[data-cols="2"],
+.desk-root[data-pane="narrow"] .desk-grid[data-cols="3"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.desk-root[data-pane="narrow"] .desk-card.desk-span-1,
+.desk-root[data-pane="narrow"] .desk-card.desk-span-2,
+.desk-root[data-pane="narrow"] .desk-card.desk-span-3 { grid-column: 1 / -1; }
+/* A single column can afford to be taller — but NOT unbounded. Removing the cap
+   here grew cards to 1280px, which is the "scroll the card instead of the page"
+   problem this cap exists to prevent. Raise it, don't drop it. */
+.desk-root[data-pane="narrow"] .desk-card {
+  max-height: calc(var(--desk-card-max) + 18vh);
+}
+.desk-root[data-pane="narrow"] .desk-shell { padding: 22px 15px 30px; gap: 14px; }
+.desk-root[data-pane="narrow"] .desk-hero h1 { font-size: 22px; }
+.desk-root[data-pane="narrow"] .desk-hero-side { align-items: flex-start; }
+.desk-root[data-pane="narrow"] .desk-pills { justify-content: flex-start; }
+.desk-root[data-pane="narrow"] .desk-dock-grid { grid-template-columns: minmax(0, 1fr); }
+.desk-root[data-pane="narrow"] .desk-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.desk-root[data-pane="narrow"] .desk-bar-row { grid-template-columns: minmax(44px, 70px) 1fr auto; }
+/* Two columns of pictures still read as a wall; six do not fit 600px. */
+.desk-root[data-pane="narrow"] .desk-shots { --desk-shot-min: 120px; }
+/* Segmented tabs wrap instead of squeezing each label to a couple of characters. */
+.desk-root[data-pane="narrow"] .desk-switch { flex-wrap: wrap; }
+
+/* Medium pane: allow at most two columns even if three are configured. */
+.desk-root[data-pane="medium"] .desk-grid[data-cols="3"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Window-level fallbacks, for a small window rather than a small pane. */
+@media (max-width: 900px) {
+  .desk-grid { grid-template-columns: minmax(0, 1fr); }
+  .desk-card.desk-span-1,
+  .desk-card.desk-span-2,
+  .desk-card.desk-span-3 { grid-column: 1 / -1; }
+  .desk-shell { padding: 24px 18px 32px; }
+  .desk-hero-side { align-items: flex-start; }
+  .desk-pills { justify-content: flex-start; }
+}
+
+@media (max-width: 560px) {
+  .desk-shell { padding: 20px 14px 28px; gap: 16px; }
+  .desk-hero h1 { font-size: 22px; }
+  .desk-card { padding: 15px 16px 17px; }
+  .desk-dock-grid { grid-template-columns: minmax(0, 1fr); }
+  .desk-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .desk-bar-row { grid-template-columns: minmax(44px, 70px) 1fr auto; }
+}
+
+/* Sidebar splits are always narrow, whatever the pane measurement says: these are
+   Obsidian's own classes for a view dragged into the left or right sidebar.
+   `.is-mobile` is intentionally NOT listed — the plugin is desktop-only. */
+.mod-left-split .desk-grid,
+.mod-right-split .desk-grid { grid-template-columns: minmax(0, 1fr); }
+.mod-left-split .desk-card,
+.mod-right-split .desk-card { grid-column: 1 / -1; }

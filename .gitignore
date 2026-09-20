@@ -1,0 +1,7 @@
+node_modules/
+dist/
+data.json
+.test/vault-path.local
+.test/*.html
+.test/*.png
+.test/*_under_test.js

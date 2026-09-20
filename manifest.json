@@ -1,0 +1,9 @@
+{
+  "id": "axel-desk",
+  "name": "Axel Desk",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Local-first Obsidian dashboard with general productivity and computer-study templates. No account, no network.",
+  "author": "Axel",
+  "isDesktopOnly": true
+}
