@@ -1,6 +1,6 @@
 {
   "name": "obsidian-axel-desk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local-first Obsidian dashboard for general productivity and computer science study.",
   "main": "main.js",
   "scripts": {

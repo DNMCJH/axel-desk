@@ -15,8 +15,24 @@
   padding: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  background: var(--desk-bg, #faf9f7);
+  background: #faf9f7;
+  scrollbar-color: #c9c3ba #faf9f7;
 }
+.theme-dark .workspace-leaf-content[data-type="desk-home"] .view-content {
+  background: #17181a;
+  color-scheme: dark;
+  scrollbar-color: #3a3d42 #17181a;
+}
+.workspace-leaf-content[data-type="desk-home"] .view-content::-webkit-scrollbar { width: 10px; height: 10px; }
+.workspace-leaf-content[data-type="desk-home"] .view-content::-webkit-scrollbar-track { background: #faf9f7; }
+.workspace-leaf-content[data-type="desk-home"] .view-content::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #c9c3ba;
+  background-clip: padding-box;
+}
+.theme-dark .workspace-leaf-content[data-type="desk-home"] .view-content::-webkit-scrollbar-track { background: #17181a; }
+.theme-dark .workspace-leaf-content[data-type="desk-home"] .view-content::-webkit-scrollbar-thumb { background: #3a3d42; background-clip: padding-box; }
 
 /* -- 1. tokens ----------------------------------------------------------- */
 

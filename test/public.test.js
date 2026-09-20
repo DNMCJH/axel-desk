@@ -27,7 +27,9 @@ function walk(dir) {
 async function main() {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   assert(manifest.id === 'axel-desk', 'manifest id');
-  assert(manifest.version === '0.1.0', 'public version');
+  assert(manifest.version === '0.1.1', 'public version');
+  const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
+  assert(/theme-dark[\s\S]*background:\s*#17181a/.test(css), 'dark host surface and scrollbar track are explicit');
 
   const forbidden = /workshop|工作坊|\bopc\b|一人公司|client|客户|cohort|roster|学员|FAQ|交付物|深演智进|陈嘉豪/i;
   const leaked = [];
