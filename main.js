@@ -3126,7 +3126,6 @@ ${body}
                 }, cards.map((card) => this.renderCard(card, ctx))),
                 this.renderFooter(ctx)
               ]),
-              this.renderItemVaultButton(),
               this.renderItemVault(),
               this.renderTextPreview()
             ]);
@@ -3442,7 +3441,8 @@ ${body}
               div({ cls: "desk-status" }, [
                 span({ cls: "desk-dot" }),
                 span({ text: `\u672C\u5730\u626B\u63CF ${model.files.length} \u7BC7` }),
-                button({ cls: "desk-head-btn", text: "\u5237\u65B0", onClick: () => this.hardRefresh() })
+                button({ cls: "desk-head-btn", text: "\u5237\u65B0", onClick: () => this.hardRefresh() }),
+                this.renderItemVaultButton()
               ]),
               div({ cls: "desk-pills" }, [
                 span({ cls: dueToday ? "is-warn" : "", text: `${dueToday} \u6761\u5230\u671F` }),

@@ -1360,17 +1360,13 @@
 
 /* Recycle bin: peripheral, but reachable whenever Desk is open. */
 .desk-root .desk-recycle-button {
-  position: fixed;
-  right: 24px;
-  bottom: 20px;
-  z-index: 25;
-  padding: 7px 13px;
+  display: inline-block;
+  padding: 4px 10px;
   border: 1px solid var(--desk-line);
   border-radius: 999px;
   background: var(--desk-card);
   color: var(--desk-ink-soft);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-  opacity: 0.76;
+  opacity: 0.72;
 }
 .desk-root .desk-recycle-button:hover,
 .desk-root .desk-recycle-button:focus-visible { opacity: 1; color: var(--desk-accent); }
@@ -1415,7 +1411,6 @@
 .desk-recycle-footer { justify-content: flex-end; margin-top: auto; padding-top: 8px; border-top: 1px solid var(--desk-line-soft); }
 .desk-recycle-empty { padding: 28px 14px; text-align: center; color: var(--desk-ink-faint); }
 @media (max-width: 520px) {
-  .desk-root .desk-recycle-button { right: 12px; bottom: 12px; }
   .desk-recycle-drawer { width: 100%; padding: 18px 14px; }
   .desk-recycle-item { align-items: flex-start; flex-direction: column; }
   .desk-recycle-actions { width: 100%; justify-content: flex-start; }

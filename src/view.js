@@ -534,7 +534,6 @@ function makeView({ ItemView, Notice, normalizePath }) {
             }, cards.map((card) => this.renderCard(card, ctx))),
             this.renderFooter(ctx),
           ]),
-          this.renderItemVaultButton(),
           this.renderItemVault(),
           this.renderTextPreview(),
         ]);
@@ -889,6 +888,7 @@ function makeView({ ItemView, Notice, normalizePath }) {
             span({ cls: 'desk-dot' }),
             span({ text: `本地扫描 ${model.files.length} 篇` }),
             button({ cls: 'desk-head-btn', text: '刷新', onClick: () => this.hardRefresh() }),
+            this.renderItemVaultButton(),
           ]),
           div({ cls: 'desk-pills' }, [
             span({ cls: dueToday ? 'is-warn' : '', text: `${dueToday} 条到期` }),
