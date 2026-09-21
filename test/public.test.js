@@ -27,7 +27,7 @@ function walk(dir) {
 async function main() {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   assert(manifest.id === 'axel-desk', 'manifest id');
-  assert(manifest.version === '0.1.3', 'public version');
+  assert(manifest.version === '0.1.4', 'public version');
   const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
   assert(/theme-dark[\s\S]*background:\s*#17181a/.test(css), 'dark host surface and scrollbar track are explicit');
   assert(/desk-card-active > \.desk-sub:last-child\s*\{[^}]*flex:\s*0 0 auto/.test(css),
@@ -59,10 +59,14 @@ async function main() {
 
     const DeskPlugin = requireWithStub(path.join(ROOT, 'main.js'));
     const { app } = makeApp(vault, { maxDepth: 10 });
+    const realGetFileCache = app.metadataCache.getFileCache.bind(app.metadataCache);
+    app.metadataCache.getFileCache = (file) => ({ frontmatter: (realGetFileCache(file) || {}).frontmatter || {} });
     let metadataResolved = null;
+    let metadataChanged = null;
     const originalMetadataOn = app.metadataCache.on.bind(app.metadataCache);
     app.metadataCache.on = (name, callback) => {
       if (name === 'resolved') metadataResolved = callback;
+      if (name === 'changed') metadataChanged = callback;
       return originalMetadataOn(name, callback);
     };
     const plugin = new DeskPlugin(app, manifest);
@@ -89,6 +93,9 @@ async function main() {
     await view.maintainItemStates(new Date('2026-09-20T00:00:00.000Z'));
     assert(plugin.settings.itemStates[key].state === 'archived', '30-day automatic archive');
     assert(typeof metadataResolved === 'function', 'subscribes to metadataCache resolved');
+    assert(typeof metadataChanged === 'function', 'subscribes to metadataCache changed');
+    assert(completeModel.openTasks.length > 0, 'reads tasks when metadata hints omit list items');
+    assert(completeModel.code.blocks > 0, 'reads code when metadata hints omit sections');
     const completeModel = view.data.cache;
     view.data.cache = {
       ...completeModel,

@@ -42,6 +42,7 @@ function makePlugin(obsidian) {
       });
 
       // Recompute after Obsidian finishes its all-note metadata index.
+      this.registerEvent(this.app.metadataCache.on('changed', () => this.scheduleRefresh()));
       this.registerEvent(this.app.metadataCache.on('resolved', () => this.scheduleRefresh()));
 
       this.app.workspace.onLayoutReady(() => {

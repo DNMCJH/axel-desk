@@ -247,16 +247,10 @@ class DeskData {
     const files = this.markdownFiles();
     const today = dateKey(new Date());
 
-    // Ask the metadata cache once per file which files are worth opening.
-    const toRead = [];
-    files.forEach((file) => {
-      const meta = this.app.metadataCache.getFileCache(file);
-      if (!meta) { toRead.push(file); return; }
-      const hasTask = Array.isArray(meta.listItems) && meta.listItems.some((item) => item.task !== undefined);
-      const hasCode = Array.isArray(meta.sections) && meta.sections.some((s) => s.type === 'code');
-      const hasLink = Array.isArray(meta.links) && meta.links.length > 0;
-      if (hasTask || hasCode || (want('concepts') && hasLink)) toRead.push(file);
-    });
+    // Read every Markdown body once. MetadataCache hints are not a correctness
+    // boundary: they can be incomplete while Obsidian indexes a Vault. The
+    // path+mtime fileCache keeps subsequent refreshes at zero repeated reads.
+    const toRead = files;
 
     const codeEntries = [];
     const linkEntries = [];

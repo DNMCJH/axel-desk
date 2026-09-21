@@ -977,18 +977,7 @@ var require_scan = __commonJS({
         const started = Date.now();
         const files = this.markdownFiles();
         const today = dateKey(/* @__PURE__ */ new Date());
-        const toRead = [];
-        files.forEach((file) => {
-          const meta = this.app.metadataCache.getFileCache(file);
-          if (!meta) {
-            toRead.push(file);
-            return;
-          }
-          const hasTask = Array.isArray(meta.listItems) && meta.listItems.some((item) => item.task !== void 0);
-          const hasCode = Array.isArray(meta.sections) && meta.sections.some((s) => s.type === "code");
-          const hasLink = Array.isArray(meta.links) && meta.links.length > 0;
-          if (hasTask || hasCode || want("concepts") && hasLink) toRead.push(file);
-        });
+        const toRead = files;
         const codeEntries = [];
         const linkEntries = [];
         const tasks = [];
@@ -3797,6 +3786,7 @@ var require_plugin = __commonJS({
           ["modify", "create", "delete", "rename"].forEach((event) => {
             this.registerEvent(this.app.vault.on(event, () => this.scheduleRefresh()));
           });
+          this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleRefresh()));
           this.registerEvent(this.app.metadataCache.on("resolved", () => this.scheduleRefresh()));
           this.app.workspace.onLayoutReady(() => {
             if (this.settings.firstRun) this.runFirstRunDetection();

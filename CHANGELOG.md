@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4
+
+- Read Markdown bodies even when Obsidian metadata hints omit tasks or code sections.
+- Keep refreshes efficient through path-and-mtime caching.
+- React to both per-file metadata changes and full metadata resolution.
+
 ## 0.1.3
 
 - Prevent the active-workstream DAILY LOG footer from shrinking and painting over the next card row.
