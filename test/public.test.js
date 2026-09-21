@@ -27,9 +27,11 @@ function walk(dir) {
 async function main() {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   assert(manifest.id === 'axel-desk', 'manifest id');
-  assert(manifest.version === '0.1.2', 'public version');
+  assert(manifest.version === '0.1.3', 'public version');
   const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
   assert(/theme-dark[\s\S]*background:\s*#17181a/.test(css), 'dark host surface and scrollbar track are explicit');
+  assert(/desk-card-active > \.desk-sub:last-child\s*\{[^}]*flex:\s*0 0 auto/.test(css),
+    'active-card DAILY LOG cannot shrink and overlap the next row');
 
   const forbidden = /workshop|工作坊|\bopc\b|一人公司|client|客户|cohort|roster|学员|FAQ|交付物|深演智进|陈嘉豪/i;
   const leaked = [];

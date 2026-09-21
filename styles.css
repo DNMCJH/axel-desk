@@ -1206,6 +1206,8 @@
    builds than that. */
 .desk-card > .desk-sub:last-child { margin-top: auto; }
 .desk-card.has-fill > .desk-sub:last-child { margin-top: 0; }
+/* DAILY LOG keeps its intrinsic height; the stream list above is the scroller. */
+.desk-card-active > .desk-sub:last-child { flex: 0 0 auto; }
 
 /* The calendar's month grid is fixed-size, so its day detail takes the slack. */
 .desk-card-calendar .desk-day-detail { flex: 1 1 auto; min-height: 0; }

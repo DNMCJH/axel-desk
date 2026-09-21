@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Prevent the active-workstream DAILY LOG footer from shrinking and painting over the next card row.
+- Keep the workstream list as the card's internal scroll region.
+
 ## 0.1.2
 
 - Refresh the dashboard automatically after Obsidian finishes indexing all note metadata.
