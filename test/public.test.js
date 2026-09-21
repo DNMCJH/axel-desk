@@ -35,11 +35,14 @@ async function main() {
 
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   assert(manifest.id === 'axel-desk', 'manifest id');
-  assert(manifest.version === '0.2.0-rc.2', 'public version');
+  assert(manifest.version === '0.2.0-rc.3', 'public version');
   const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
   assert(/theme-dark[\s\S]*background:\s*#17181a/.test(css), 'dark host surface and scrollbar track are explicit');
   assert(/desk-card-active > \.desk-sub:last-child\s*\{[^}]*flex:\s*0 0 auto/.test(css),
     'active-card DAILY LOG cannot shrink and overlap the next row');
+  assert(/desk-gallery-control[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) auto/.test(css), 'gallery controls use a shrink-safe grid');
+  assert(/desk-grid\[data-cols="2"\] \.desk-card\.is-compact[\s\S]*max-height:\s*none/.test(css), 'compact full-width cards are exempt from height caps');
+  assert(/desk-streak[\s\S]*repeat\(7, minmax\(0, 1fr\)\)/.test(css), 'daily streak uses stable seven-column rows');
 
   const forbidden = /workshop|工作坊|\bopc\b|一人公司|client|客户|cohort|roster|学员|FAQ|交付物|深演智进|陈嘉豪/i;
   const leaked = [];

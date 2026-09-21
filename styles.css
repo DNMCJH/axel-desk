@@ -1126,17 +1126,23 @@
 .desk-gallery-browser {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   padding-top: 2px;
 }
 .desk-gallery-control {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
 }
 .desk-gallery-select,
 .desk-gallery-input {
   min-width: 0;
-  flex: 1 1 260px;
+  width: 100%;
+  max-width: 100%;
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--desk-line);
@@ -1157,10 +1163,11 @@
 }
 .desk-gallery-nav span { min-width: 190px; text-align: center; }
 @media (max-width: 520px) {
-  .desk-gallery-control { align-items: stretch; flex-direction: column; }
-  .desk-gallery-select, .desk-gallery-input { flex-basis: auto; width: 100%; }
+  .desk-gallery-control { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
   .desk-gallery-nav span { order: -1; width: 100%; }
 }
+.desk-root[data-pane="narrow"] .desk-gallery-control { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+.desk-root[data-pane="narrow"] .desk-gallery-control .desk-head-btn { justify-self: start; }
 
 /* The element that absorbs a stretched card's spare height.
    Per-card max-heights used to live here; they were the reason a stretched card
@@ -1187,6 +1194,10 @@
 .desk-grid[data-cols="3"] .desk-card.desk-span-3 { max-height: calc(var(--desk-card-max) + 8vh); }
 /* A compact card is already at its content height; a cap would only clip it. */
 .desk-card.is-compact { max-height: none; }
+/* Full-width and narrow-pane cap selectors are more specific than the base
+   compact rule. Repeat the exemption so visual cards grow to their paged content. */
+.desk-grid[data-cols="2"] .desk-card.is-compact,
+.desk-grid[data-cols="3"] .desk-card.is-compact { max-height: none; }
 /* No min-height here: reserving space for rows that do not exist is exactly the
    blank-space problem. An empty list shows its empty state and the card shrinks. */
 .desk-card-today .desk-task-list { display: flex; flex-direction: column; gap: 1px; }
@@ -1306,7 +1317,7 @@
 /* daily-report streak strip */
 .desk-streak {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18px, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 3px;
 }
 .desk-root .desk-streak button {

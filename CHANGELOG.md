@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0-rc.3
+
+- Visual containment batch: keep gallery picker controls inside split panes.
+- Exempt compact visual cards from full-width and narrow-pane height caps.
+- Keep gallery images/navigation above the Desk footer.
+- Use a stable seven-column DAILY LOG grid and verify card/footer containment.
+- Add real split-pane geometry regressions and image-based visual QA.
+
 ## 0.2.0-rc.2
 
 - RC2: preserve blank optional paths before host normalization so an empty scope means the whole Vault and empty semantic sources stay unconfigured.
