@@ -333,8 +333,10 @@ class DeskData {
 
   /** 11-Active: one entry per workstream folder, flagged when it stalls. */
   activeStreams() {
-    const rootPath = this.normalize(this.settings.activeFolder || '');
-    const root = rootPath && this.app?.vault?.getAbstractFileByPath?.(rootPath);
+    const configured = String(this.settings.activeFolder || '').trim();
+    if (!configured) return [];
+    const rootPath = this.normalize(configured);
+    const root = this.app?.vault?.getAbstractFileByPath?.(rootPath);
     if (!root || !root.children) return [];
     const now = Date.now();
     return root.children

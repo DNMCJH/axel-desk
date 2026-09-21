@@ -27,7 +27,7 @@ function walk(dir) {
 async function main() {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   assert(manifest.id === 'axel-desk', 'manifest id');
-  assert(manifest.version === '0.1.4', 'public version');
+  assert(manifest.version === '0.2.0-rc.1', 'public version');
   const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
   assert(/theme-dark[\s\S]*background:\s*#17181a/.test(css), 'dark host surface and scrollbar track are explicit');
   assert(/desk-card-active > \.desk-sub:last-child\s*\{[^}]*flex:\s*0 0 auto/.test(css),
@@ -45,6 +45,9 @@ async function main() {
   const registry = require(path.join(ROOT, 'src', 'registry'));
   require(path.join(ROOT, 'src', 'cards')).registerAll();
   assert(JSON.stringify(registry.TEMPLATE_IDS) === JSON.stringify(['general', 'study']), 'only public templates register');
+  const generalDefaults = registry.templateCards('general');
+  assert(!generalDefaults.includes('active') && !generalDefaults.includes('digest') && !generalDefaults.includes('arsenal'),
+    'general defaults contain only low-semantic-risk cards');
 
   const vault = fs.mkdtempSync(path.join(os.tmpdir(), 'axel-desk-public-'));
   try {
@@ -72,6 +75,9 @@ async function main() {
     const plugin = new DeskPlugin(app, manifest);
     await plugin.onload();
     const view = plugin._views.get('desk-home')({ app, view: null });
+    assert(plugin.settings.activeFolder === '' && plugin.settings.inboxFolder === '',
+      'fresh install leaves semantic folder sources unconfigured');
+    assert(view.taskScope === 'all', 'fresh task view uses common filtered tasks, not guessed ownership');
 
     for (const template of registry.TEMPLATE_IDS) {
       plugin.settings.template = template;
@@ -80,6 +86,13 @@ async function main() {
       assert(view.containerEl.querySelectorAll('.desk-card').length > 0, `${template} renders cards`);
       assert(view.containerEl.querySelectorAll('.desk-card-error').length === 0, `${template} has no card errors`);
     }
+
+    view.diagnosticsOpen = true;
+    await view.rerender();
+    const diagnostics = view.containerEl.textContent || '';
+    assert(diagnostics.includes('数据诊断') && diagnostics.includes('Vault Markdown'), 'diagnostics exposes scan counts');
+    view.diagnosticsOpen = false;
+    await view.rerender();
 
     const before = fs.readFileSync(path.join(vault, 'Inbox', 'read.md'), 'utf8');
     await view.closeItem({

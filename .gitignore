@@ -5,3 +5,5 @@ data.json
 .test/*.html
 .test/*.png
 .test/*_under_test.js
+
+.codex_backups/

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0-rc.1
+
+- RC: general defaults now use low-semantic-risk cards only.
+- Semantic cards show unconfigured states instead of guessing Vault folders.
+- Add a local data-diagnostics drawer for scan counts and source configuration.
+- Rename business-heavy labels to neutral activity and learning language.
+
 ## 0.1.4
 
 - Read Markdown bodies even when Obsidian metadata hints omit tasks or code sections.

@@ -33,7 +33,7 @@ const arsenalCard = {
   span: 'half',
   grow: 'fill',
   desc: '已沉淀的 skill、模板、SOP。回答「我有什么可以复用」而不是「我在做什么」',
-  templates: ['general', 'study'],
+  templates: ['study'],
   needs: ['arsenal'],
   render(ctx) {
     const { model, view, settings } = ctx;

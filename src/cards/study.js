@@ -59,7 +59,7 @@ const codeCard = {
 
 const conceptCard = {
   id: 'concepts',
-  label: '概念债',
+  label: '概念候选',
   kicker: 'DEBT',
   span: 'half',
   desc: '你引用过但还没写的概念（未解析的 [[链接]]），按被引用次数排序',
@@ -70,7 +70,7 @@ const conceptCard = {
     const concepts = model.concepts || { items: [], total: 0 };
     if (!concepts.items.length) {
       return [
-        ui.cardHead('DEBT', '概念债'),
+        ui.cardHead('DEBT', '概念候选'),
         ui.empty('没有未解析的链接。', '写笔记时用 [[概念名]] 提到还没学的东西，这里就会排队。'),
       ];
     }
@@ -90,7 +90,7 @@ const conceptCard = {
       onClick: () => view.createConceptNote(item.name, item.sources[0]),
     }));
     return [
-      ui.cardHead('DEBT', '概念债', [ui.countChip(`${concepts.total} 个`)]),
+      ui.cardHead('DEBT', '概念候选', [ui.countChip(`${concepts.total} 个`)]),
       ui.note('这些是你在笔记里 [[提到]] 过、但还没有对应笔记的概念。点一条直接建笔记。'),
       ui.rowList(rows, ui.empty('没有未解析的链接。'), 'desk-concept-list'),
     ];
@@ -99,10 +99,10 @@ const conceptCard = {
 
 const reviewCard = {
   id: 'review',
-  label: '复习队列',
+  label: '久未修改笔记',
   kicker: 'REVIEW',
   span: 'half',
-  desc: '很久没碰过的笔记，最久的排前面（无需额外元数据的间隔重复）',
+  desc: '按最后修改时间列出长期未触碰的笔记，不等同于复习任务',
   templates: ['study'],
   needs: ['review'],
   render(ctx) {
@@ -122,7 +122,7 @@ const reviewCard = {
       onClick: () => view.openFile(item.path),
     }));
     return [
-      ui.cardHead('REVIEW', '复习队列', [ui.countChip(`${review.total} 篇`)]),
+      ui.cardHead('REVIEW', '久未修改笔记', [ui.countChip(`${review.total} 篇`)]),
       ui.note(`超过 ${review.min} 天没打开过的笔记。看一眼还记得多少，比重新学便宜。`),
       ui.rowList(rows, ui.empty('所有笔记都在最近碰过。'), 'desk-review-list'),
     ];

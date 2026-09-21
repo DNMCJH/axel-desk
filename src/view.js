@@ -41,7 +41,7 @@ function makeView({ ItemView, Notice, normalizePath }) {
       this.data = new DeskData(this.app, plugin.settings, { normalize: normalizePath });
       this.selectedDate = dateKey(new Date());
       // open on my own work, not the whole pile
-      this.taskScope = 'mine';
+      this.taskScope = 'all';
       this.pinnedCache = null;
       this.arsenalGroup = 'skills';
       this.galleryPickerOpen = false;
@@ -50,6 +50,7 @@ function makeView({ ItemView, Notice, normalizePath }) {
       this.galleryTimer = 0;
       this.galleryTimerKey = '';
       this.itemVaultOpen = false;
+      this.diagnosticsOpen = false;
       this.itemVaultTab = 'closed';
       this.itemStateSaveTimer = 0;
       this.textPreview = null;
@@ -535,6 +536,7 @@ function makeView({ ItemView, Notice, normalizePath }) {
             this.renderFooter(ctx),
           ]),
           this.renderItemVault(),
+          this.renderDiagnostics(ctx),
           this.renderTextPreview(),
         ]);
 
@@ -854,6 +856,33 @@ function makeView({ ItemView, Notice, normalizePath }) {
       ]);
     }
 
+    renderDiagnostics(ctx) {
+      if (!this.diagnosticsOpen) return null;
+      const { model, settings } = ctx;
+      const vaultMarkdown = this.app.vault.getMarkdownFiles ? this.app.vault.getMarkdownFiles().length : model.files.length;
+      const sources = [['扫描范围', settings.workRoot || '整个 Vault'], ['收件箱', settings.inboxFolder || '未配置'],
+        ['研究目录', settings.researchFolder || '未配置'], ['项目目录', settings.projectFolder || '未配置'],
+        ['进行中项目', settings.activeFolder || '未配置'], ['阻塞目录', settings.blockerFolder || '未配置']];
+      const metrics = [['Vault Markdown', vaultMarkdown], ['进入模型', model.files.length], ['原始未完成', model.allOpenCount],
+        ['规则过滤', model.hiddenCount], ['来源限流', model.cappedCount], ['有效待办', model.openTasks.length],
+        ['代码块', model.code ? model.code.blocks : '未启用'], ['待处理', model.digest ? model.digest.length : '未启用'],
+        ['最近项目', model.recent ? model.recent.length : '未启用'], ['扫描耗时', `${model.scanMs || 0}ms`]];
+      const warnings = [];
+      if (settings.workRoot && !this.app.vault.getAbstractFileByPath(this.normalize(settings.workRoot))) warnings.push(`扫描根目录不存在：${settings.workRoot}`);
+      if (vaultMarkdown > 0 && model.files.length === 0) warnings.push('Vault 有 Markdown，但当前模型为 0；请检查扫描范围或索引状态。');
+      return div({ cls: ['desk-diagnostics-overlay', 'desk-recycle-overlay'], onClick: (event) => {
+        if (event.target && event.target.classList.contains('desk-diagnostics-overlay')) { this.diagnosticsOpen = false; this.rerender(); }
+      } }, [el('aside', { cls: ['desk-diagnostics-drawer', 'desk-recycle-drawer'], attr: { role: 'dialog', 'aria-label': 'Desk 数据诊断' } }, [
+        div({ cls: 'desk-recycle-head' }, [div({}, [span({ text: 'DESK' }), el('h2', { text: '数据诊断' })]),
+          button({ cls: 'desk-head-btn', text: '关闭', onClick: () => { this.diagnosticsOpen = false; this.rerender(); } })]),
+        warnings.length ? div({ cls: 'desk-diagnostics-warnings' }, warnings.map((text) => el('p', { text }))) : null,
+        div({ cls: 'desk-diagnostics-grid' }, metrics.map(([label, value]) => div({}, [span({ text: label }), el('b', { text: String(value) })]))),
+        el('section', { cls: 'desk-diagnostics-sources' }, [el('h3', { text: '数据来源配置' }),
+          ...sources.map(([label, value]) => div({}, [span({ text: label }), el('code', { text: String(value) })]))]),
+        el('p', { cls: 'desk-recycle-note', text: '“未配置”与“已配置但没有数据”是不同状态。诊断只读取统计，不修改任何笔记。' }),
+      ])]);
+    }
+
     renderHero(ctx) {
       const { model, settings, now } = ctx;
       const today = dateKey(now);
@@ -888,6 +917,7 @@ function makeView({ ItemView, Notice, normalizePath }) {
             span({ cls: 'desk-dot' }),
             span({ text: `本地扫描 ${model.files.length} 篇` }),
             button({ cls: 'desk-head-btn', text: '刷新', onClick: () => this.hardRefresh() }),
+            button({ cls: 'desk-head-btn', text: '数据诊断', onClick: () => { this.diagnosticsOpen = true; this.rerender(); } }),
             this.renderItemVaultButton(),
           ]),
           div({ cls: 'desk-pills' }, [

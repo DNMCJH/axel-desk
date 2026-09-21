@@ -247,11 +247,11 @@ function dayDetail(ctx, key) {
 
 const heatCard = {
   id: 'heat',
-  label: '产出节奏',
-  kicker: 'OUTPUT',
+  label: 'Vault 活动',
+  kicker: 'ACTIVITY',
   span: 'full',
   grow: 'compact',
-  desc: '热力图 + 产出指标 + 目录分布',
+  desc: '笔记活动热力图 + 活跃日期 + 目录分布',
   templates: ['general', 'study'],
   needs: ['heat'],
   render(ctx) {
@@ -273,10 +273,10 @@ const heatCard = {
     )));
     const avg = heat.activeDays ? (heat.total / heat.activeDays).toFixed(1) : '0';
     return [
-      ui.cardHead('OUTPUT', '产出节奏'),
+      ui.cardHead('ACTIVITY', 'Vault 活动'),
       ui.metrics([
         { value: heat.total, label: '新建笔记' },
-        { value: heat.activeDays, label: '有产出的天' },
+        { value: heat.activeDays, label: '有活动的天' },
         { value: avg, label: '活跃日均' },
         { value: heat.peak, label: '单日峰值' },
       ]),
@@ -297,14 +297,23 @@ const heatCard = {
 
 const digestCard = {
   id: 'digest',
-  label: '待消化 / 阻塞',
+  label: '待处理来源',
   kicker: 'TO DIGEST',
   span: 'half',
-  desc: '阻塞项、收件箱未归类、最近动过的笔记',
-  templates: ['general'],
+  desc: '按已配置来源聚合收件箱、研究、阻塞和最近项目',
+  templates: [],
   needs: ['digest', 'blockers', 'recent'],
   render(ctx) {
     const { model, view, settings } = ctx;
+    const configuredSources = [settings.inboxFolder, settings.researchFolder, settings.blockerFolder,
+      settings.projectFolder, settings.activeFolder]
+      .map((value) => String(value || '').trim()).filter(Boolean);
+    if (!configuredSources.length) {
+      return [
+        ui.cardHead('TO PROCESS', '待处理来源'),
+        ui.unconfigured('尚未配置待处理来源。', '可以配置收件箱、研究、阻塞或项目目录；未配置不等于已经清空。'),
+      ];
+    }
     const blockers = model.blockers || [];
     // Stale blockers go last, muted, but are never truncated away: out of the list
     // is out of mind, which is how a backlog reaches 128 days old. The list
@@ -332,7 +341,7 @@ const digestCard = {
         meta: `${item.source} · ${ageLabel(item.idle)}`,
         icon: '',
         dismiss: {
-          cardId: 'digest', cardLabel: '待消化 / 阻塞', id: item.path,
+          cardId: 'digest', cardLabel: '待处理来源', id: item.path,
           label: item.title, sourcePaths: [item.path],
           signature: itemSignature([item.path, item.title, item.source]),
         },
@@ -353,11 +362,11 @@ const digestCard = {
       onClick: () => view.openFile(item.path),
     }));
     return [
-      ui.cardHead('TO DIGEST', '待消化 / 阻塞', [
+      ui.cardHead('TO PROCESS', '待处理来源', [
         stale.length ? ui.countChip(`${stale.length} 项超 30 天`) : null,
-        { label: '打开收件箱', onClick: () => view.plugin.revealFolder(settings.inboxFolder) },
+        settings.inboxFolder ? { label: '打开收件箱', onClick: () => view.plugin.revealFolder(settings.inboxFolder) } : null,
       ]),
-      ui.rowList(rows, ui.empty('收件箱和阻塞区都清空了。'), 'desk-digest-list'),
+      ui.rowList(rows, ui.empty('按当前配置没有待处理内容。', '数据源已配置；可以查看规则或调整扫描范围。'), 'desk-digest-list'),
       // A secondary list keeps its content height; the primary list above takes
       // the card's spare space.
       ui.subSection('RECENT · 最近动过', ui.rowList(recent, ui.empty('没有最近改动的项目笔记。'), '', { fill: false })),

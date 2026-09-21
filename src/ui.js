@@ -54,6 +54,13 @@ function empty(text, hint, { fill = false } = {}) {
  * Empty state for a card whose data source folder does not exist in this vault.
  * Says so plainly instead of implying the user has no work.
  */
+function unconfigured(text, hint = 'Choose a data source in settings, or disable this card for now.') {
+  return div({ cls: ['desk-empty', 'desk-unconfigured', 'desk-fill'] }, [
+    span({ text }),
+    el('em', { text: hint }),
+  ]);
+}
+
 function missingFolder(folder, what) {
   return div({ cls: 'desk-empty' }, [
     span({ text: `这个库没有 ` }),
@@ -250,7 +257,7 @@ function blockerRow({ title, status, state, age, stale, onResolve, onObsolete, o
 }
 
 module.exports = {
-  cardHead, headButton, countChip, empty, missingFolder, subSection,
+  cardHead, headButton, countChip, empty, unconfigured, missingFolder, subSection,
   barRow, barList, listRow, rowList, metrics, segmented, progress, tags, note, checkRow,
   blockerRow,
   el, div, span, button, data,

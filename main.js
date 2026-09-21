@@ -496,6 +496,12 @@ var require_ui = __commonJS({
         hint ? el("em", { text: hint }) : null
       ]);
     }
+    function unconfigured(text, hint = "Choose a data source in settings, or disable this card for now.") {
+      return div({ cls: ["desk-empty", "desk-unconfigured", "desk-fill"] }, [
+        span({ text }),
+        el("em", { text: hint })
+      ]);
+    }
     function missingFolder(folder, what) {
       return div({ cls: "desk-empty" }, [
         span({ text: `\u8FD9\u4E2A\u5E93\u6CA1\u6709 ` }),
@@ -645,6 +651,7 @@ var require_ui = __commonJS({
       headButton,
       countChip,
       empty,
+      unconfigured,
       missingFolder,
       subSection,
       barRow,
@@ -1054,8 +1061,10 @@ var require_scan = __commonJS({
       /** 11-Active: one entry per workstream folder, flagged when it stalls. */
       activeStreams() {
         var _a, _b, _c;
-        const rootPath = this.normalize(this.settings.activeFolder || "");
-        const root = rootPath && ((_c = (_b = (_a = this.app) == null ? void 0 : _a.vault) == null ? void 0 : _b.getAbstractFileByPath) == null ? void 0 : _c.call(_b, rootPath));
+        const configured = String(this.settings.activeFolder || "").trim();
+        if (!configured) return [];
+        const rootPath = this.normalize(configured);
+        const root = (_c = (_b = (_a = this.app) == null ? void 0 : _a.vault) == null ? void 0 : _b.getAbstractFileByPath) == null ? void 0 : _c.call(_b, rootPath);
         if (!root || !root.children) return [];
         const now = Date.now();
         return root.children.filter((child) => child.children).map((folder) => {
@@ -1844,11 +1853,11 @@ var require_core = __commonJS({
     }
     var heatCard = {
       id: "heat",
-      label: "\u4EA7\u51FA\u8282\u594F",
-      kicker: "OUTPUT",
+      label: "Vault \u6D3B\u52A8",
+      kicker: "ACTIVITY",
       span: "full",
       grow: "compact",
-      desc: "\u70ED\u529B\u56FE + \u4EA7\u51FA\u6307\u6807 + \u76EE\u5F55\u5206\u5E03",
+      desc: "\u7B14\u8BB0\u6D3B\u52A8\u70ED\u529B\u56FE + \u6D3B\u8DC3\u65E5\u671F + \u76EE\u5F55\u5206\u5E03",
       templates: ["general", "study"],
       needs: ["heat"],
       render(ctx) {
@@ -1872,10 +1881,10 @@ var require_core = __commonJS({
         )));
         const avg = heat.activeDays ? (heat.total / heat.activeDays).toFixed(1) : "0";
         return [
-          ui.cardHead("OUTPUT", "\u4EA7\u51FA\u8282\u594F"),
+          ui.cardHead("ACTIVITY", "Vault \u6D3B\u52A8"),
           ui.metrics([
             { value: heat.total, label: "\u65B0\u5EFA\u7B14\u8BB0" },
-            { value: heat.activeDays, label: "\u6709\u4EA7\u51FA\u7684\u5929" },
+            { value: heat.activeDays, label: "\u6709\u6D3B\u52A8\u7684\u5929" },
             { value: avg, label: "\u6D3B\u8DC3\u65E5\u5747" },
             { value: heat.peak, label: "\u5355\u65E5\u5CF0\u503C" }
           ]),
@@ -1895,14 +1904,27 @@ var require_core = __commonJS({
     };
     var digestCard = {
       id: "digest",
-      label: "\u5F85\u6D88\u5316 / \u963B\u585E",
+      label: "\u5F85\u5904\u7406\u6765\u6E90",
       kicker: "TO DIGEST",
       span: "half",
-      desc: "\u963B\u585E\u9879\u3001\u6536\u4EF6\u7BB1\u672A\u5F52\u7C7B\u3001\u6700\u8FD1\u52A8\u8FC7\u7684\u7B14\u8BB0",
-      templates: ["general"],
+      desc: "\u6309\u5DF2\u914D\u7F6E\u6765\u6E90\u805A\u5408\u6536\u4EF6\u7BB1\u3001\u7814\u7A76\u3001\u963B\u585E\u548C\u6700\u8FD1\u9879\u76EE",
+      templates: [],
       needs: ["digest", "blockers", "recent"],
       render(ctx) {
         const { model, view, settings } = ctx;
+        const configuredSources = [
+          settings.inboxFolder,
+          settings.researchFolder,
+          settings.blockerFolder,
+          settings.projectFolder,
+          settings.activeFolder
+        ].map((value) => String(value || "").trim()).filter(Boolean);
+        if (!configuredSources.length) {
+          return [
+            ui.cardHead("TO PROCESS", "\u5F85\u5904\u7406\u6765\u6E90"),
+            ui.unconfigured("\u5C1A\u672A\u914D\u7F6E\u5F85\u5904\u7406\u6765\u6E90\u3002", "\u53EF\u4EE5\u914D\u7F6E\u6536\u4EF6\u7BB1\u3001\u7814\u7A76\u3001\u963B\u585E\u6216\u9879\u76EE\u76EE\u5F55\uFF1B\u672A\u914D\u7F6E\u4E0D\u7B49\u4E8E\u5DF2\u7ECF\u6E05\u7A7A\u3002")
+          ];
+        }
         const blockers = model.blockers || [];
         const fresh = blockers.filter((item) => !item.stale);
         const stale = blockers.filter((item) => item.stale);
@@ -1925,7 +1947,7 @@ var require_core = __commonJS({
             icon: "",
             dismiss: {
               cardId: "digest",
-              cardLabel: "\u5F85\u6D88\u5316 / \u963B\u585E",
+              cardLabel: "\u5F85\u5904\u7406\u6765\u6E90",
               id: item.path,
               label: item.title,
               sourcePaths: [item.path],
@@ -1951,11 +1973,11 @@ var require_core = __commonJS({
           onClick: () => view.openFile(item.path)
         }));
         return [
-          ui.cardHead("TO DIGEST", "\u5F85\u6D88\u5316 / \u963B\u585E", [
+          ui.cardHead("TO PROCESS", "\u5F85\u5904\u7406\u6765\u6E90", [
             stale.length ? ui.countChip(`${stale.length} \u9879\u8D85 30 \u5929`) : null,
-            { label: "\u6253\u5F00\u6536\u4EF6\u7BB1", onClick: () => view.plugin.revealFolder(settings.inboxFolder) }
+            settings.inboxFolder ? { label: "\u6253\u5F00\u6536\u4EF6\u7BB1", onClick: () => view.plugin.revealFolder(settings.inboxFolder) } : null
           ]),
-          ui.rowList(rows, ui.empty("\u6536\u4EF6\u7BB1\u548C\u963B\u585E\u533A\u90FD\u6E05\u7A7A\u4E86\u3002"), "desk-digest-list"),
+          ui.rowList(rows, ui.empty("\u6309\u5F53\u524D\u914D\u7F6E\u6CA1\u6709\u5F85\u5904\u7406\u5185\u5BB9\u3002", "\u6570\u636E\u6E90\u5DF2\u914D\u7F6E\uFF1B\u53EF\u4EE5\u67E5\u770B\u89C4\u5219\u6216\u8C03\u6574\u626B\u63CF\u8303\u56F4\u3002"), "desk-digest-list"),
           // A secondary list keeps its content height; the primary list above takes
           // the card's spare space.
           ui.subSection("RECENT \xB7 \u6700\u8FD1\u52A8\u8FC7", ui.rowList(recent, ui.empty("\u6CA1\u6709\u6700\u8FD1\u6539\u52A8\u7684\u9879\u76EE\u7B14\u8BB0\u3002"), "", { fill: false }))
@@ -1977,14 +1999,21 @@ var require_work = __commonJS({
     var { itemSignature } = require_item_state();
     var activeCard = {
       id: "active",
-      label: "\u8FDB\u884C\u4E2D\u7684\u7EBF",
+      label: "\u8FDB\u884C\u4E2D\u7684\u9879\u76EE",
       kicker: "IN FLIGHT",
       span: "half",
-      desc: "\u8DE8\u5929\u672A\u95ED\u73AF\u7684\u5DE5\u4F5C\u7EBF\uFF0C\u505C\u6EDE\u4F1A\u6807\u7EA2\uFF1B\u76F4\u63A5\u8DF3\u5230\u8BE5\u7EBF\u7684 STATE.md",
-      templates: ["general"],
+      desc: "\u6309\u5DF2\u914D\u7F6E\u9879\u76EE\u76EE\u5F55\u5C55\u793A\u8FDB\u884C\u4E2D\u9879\u76EE\uFF0C\u505C\u6EDE\u4F1A\u6807\u7EA2",
+      templates: [],
       needs: ["active", "streak"],
       render(ctx) {
         const { model, view, settings, data } = ctx;
+        const configured = String(settings.activeFolder || "").trim();
+        if (!configured) {
+          return [
+            ui.cardHead("IN FLIGHT", "\u8FDB\u884C\u4E2D\u7684\u9879\u76EE"),
+            ui.unconfigured("\u5C1A\u672A\u914D\u7F6E\u8FDB\u884C\u4E2D\u7684\u9879\u76EE\u3002", "\u8BF7\u9009\u62E9\u9879\u76EE\u6839\u76EE\u5F55\uFF1BDesk \u4E0D\u4F1A\u628A Vault \u6839\u76EE\u5F55\u81EA\u52A8\u5F53\u6210\u9879\u76EE\u3002")
+          ];
+        }
         const streams = model.active || [];
         let body;
         if (!streams.length) {
@@ -1996,7 +2025,7 @@ var require_work = __commonJS({
             icon: "",
             dismiss: {
               cardId: "active",
-              cardLabel: "\u8FDB\u884C\u4E2D\u7684\u7EBF",
+              cardLabel: "\u8FDB\u884C\u4E2D\u7684\u9879\u76EE",
               id: stream.path,
               label: stream.name,
               sourcePaths: [stream.statePath || stream.newest && stream.newest.path || stream.path],
@@ -2011,7 +2040,7 @@ var require_work = __commonJS({
           })), null, "desk-stream-list");
         }
         return [
-          ui.cardHead("IN FLIGHT", "\u8FDB\u884C\u4E2D\u7684\u7EBF", [
+          ui.cardHead("IN FLIGHT", "\u8FDB\u884C\u4E2D\u7684\u9879\u76EE", [
             { label: "\u6253\u5F00\u76EE\u5F55", onClick: () => view.plugin.revealFolder(settings.activeFolder) }
           ]),
           body,
@@ -2100,7 +2129,7 @@ var require_study = __commonJS({
     };
     var conceptCard = {
       id: "concepts",
-      label: "\u6982\u5FF5\u503A",
+      label: "\u6982\u5FF5\u5019\u9009",
       kicker: "DEBT",
       span: "half",
       desc: "\u4F60\u5F15\u7528\u8FC7\u4F46\u8FD8\u6CA1\u5199\u7684\u6982\u5FF5\uFF08\u672A\u89E3\u6790\u7684 [[\u94FE\u63A5]]\uFF09\uFF0C\u6309\u88AB\u5F15\u7528\u6B21\u6570\u6392\u5E8F",
@@ -2111,7 +2140,7 @@ var require_study = __commonJS({
         const concepts = model.concepts || { items: [], total: 0 };
         if (!concepts.items.length) {
           return [
-            ui.cardHead("DEBT", "\u6982\u5FF5\u503A"),
+            ui.cardHead("DEBT", "\u6982\u5FF5\u5019\u9009"),
             ui.empty("\u6CA1\u6709\u672A\u89E3\u6790\u7684\u94FE\u63A5\u3002", "\u5199\u7B14\u8BB0\u65F6\u7528 [[\u6982\u5FF5\u540D]] \u63D0\u5230\u8FD8\u6CA1\u5B66\u7684\u4E1C\u897F\uFF0C\u8FD9\u91CC\u5C31\u4F1A\u6392\u961F\u3002")
           ];
         }
@@ -2134,7 +2163,7 @@ var require_study = __commonJS({
           onClick: () => view.createConceptNote(item.name, item.sources[0])
         }));
         return [
-          ui.cardHead("DEBT", "\u6982\u5FF5\u503A", [ui.countChip(`${concepts.total} \u4E2A`)]),
+          ui.cardHead("DEBT", "\u6982\u5FF5\u5019\u9009", [ui.countChip(`${concepts.total} \u4E2A`)]),
           ui.note("\u8FD9\u4E9B\u662F\u4F60\u5728\u7B14\u8BB0\u91CC [[\u63D0\u5230]] \u8FC7\u3001\u4F46\u8FD8\u6CA1\u6709\u5BF9\u5E94\u7B14\u8BB0\u7684\u6982\u5FF5\u3002\u70B9\u4E00\u6761\u76F4\u63A5\u5EFA\u7B14\u8BB0\u3002"),
           ui.rowList(rows, ui.empty("\u6CA1\u6709\u672A\u89E3\u6790\u7684\u94FE\u63A5\u3002"), "desk-concept-list")
         ];
@@ -2142,10 +2171,10 @@ var require_study = __commonJS({
     };
     var reviewCard = {
       id: "review",
-      label: "\u590D\u4E60\u961F\u5217",
+      label: "\u4E45\u672A\u4FEE\u6539\u7B14\u8BB0",
       kicker: "REVIEW",
       span: "half",
-      desc: "\u5F88\u4E45\u6CA1\u78B0\u8FC7\u7684\u7B14\u8BB0\uFF0C\u6700\u4E45\u7684\u6392\u524D\u9762\uFF08\u65E0\u9700\u989D\u5916\u5143\u6570\u636E\u7684\u95F4\u9694\u91CD\u590D\uFF09",
+      desc: "\u6309\u6700\u540E\u4FEE\u6539\u65F6\u95F4\u5217\u51FA\u957F\u671F\u672A\u89E6\u78B0\u7684\u7B14\u8BB0\uFF0C\u4E0D\u7B49\u540C\u4E8E\u590D\u4E60\u4EFB\u52A1",
       templates: ["study"],
       needs: ["review"],
       render(ctx) {
@@ -2168,7 +2197,7 @@ var require_study = __commonJS({
           onClick: () => view.openFile(item.path)
         }));
         return [
-          ui.cardHead("REVIEW", "\u590D\u4E60\u961F\u5217", [ui.countChip(`${review.total} \u7BC7`)]),
+          ui.cardHead("REVIEW", "\u4E45\u672A\u4FEE\u6539\u7B14\u8BB0", [ui.countChip(`${review.total} \u7BC7`)]),
           ui.note(`\u8D85\u8FC7 ${review.min} \u5929\u6CA1\u6253\u5F00\u8FC7\u7684\u7B14\u8BB0\u3002\u770B\u4E00\u773C\u8FD8\u8BB0\u5F97\u591A\u5C11\uFF0C\u6BD4\u91CD\u65B0\u5B66\u4FBF\u5B9C\u3002`),
           ui.rowList(rows, ui.empty("\u6240\u6709\u7B14\u8BB0\u90FD\u5728\u6700\u8FD1\u78B0\u8FC7\u3002"), "desk-review-list")
         ];
@@ -2301,7 +2330,7 @@ var require_arsenal = __commonJS({
       span: "half",
       grow: "fill",
       desc: "\u5DF2\u6C89\u6DC0\u7684 skill\u3001\u6A21\u677F\u3001SOP\u3002\u56DE\u7B54\u300C\u6211\u6709\u4EC0\u4E48\u53EF\u4EE5\u590D\u7528\u300D\u800C\u4E0D\u662F\u300C\u6211\u5728\u505A\u4EC0\u4E48\u300D",
-      templates: ["general", "study"],
+      templates: ["study"],
       needs: ["arsenal"],
       render(ctx) {
         const { model, view, settings } = ctx;
@@ -2645,7 +2674,7 @@ var require_view = __commonJS({
           this.normalize = normalizePath;
           this.data = new DeskData(this.app, plugin.settings, { normalize: normalizePath });
           this.selectedDate = dateKey(/* @__PURE__ */ new Date());
-          this.taskScope = "mine";
+          this.taskScope = "all";
           this.pinnedCache = null;
           this.arsenalGroup = "skills";
           this.galleryPickerOpen = false;
@@ -2654,6 +2683,7 @@ var require_view = __commonJS({
           this.galleryTimer = 0;
           this.galleryTimerKey = "";
           this.itemVaultOpen = false;
+          this.diagnosticsOpen = false;
           this.itemVaultTab = "closed";
           this.itemStateSaveTimer = 0;
           this.textPreview = null;
@@ -3116,6 +3146,7 @@ ${body}
                 this.renderFooter(ctx)
               ]),
               this.renderItemVault(),
+              this.renderDiagnostics(ctx),
               this.renderTextPreview()
             ]);
             fill(container, root);
@@ -3401,6 +3432,55 @@ ${body}
             ])
           ]);
         }
+        renderDiagnostics(ctx) {
+          if (!this.diagnosticsOpen) return null;
+          const { model, settings } = ctx;
+          const vaultMarkdown = this.app.vault.getMarkdownFiles ? this.app.vault.getMarkdownFiles().length : model.files.length;
+          const sources = [
+            ["\u626B\u63CF\u8303\u56F4", settings.workRoot || "\u6574\u4E2A Vault"],
+            ["\u6536\u4EF6\u7BB1", settings.inboxFolder || "\u672A\u914D\u7F6E"],
+            ["\u7814\u7A76\u76EE\u5F55", settings.researchFolder || "\u672A\u914D\u7F6E"],
+            ["\u9879\u76EE\u76EE\u5F55", settings.projectFolder || "\u672A\u914D\u7F6E"],
+            ["\u8FDB\u884C\u4E2D\u9879\u76EE", settings.activeFolder || "\u672A\u914D\u7F6E"],
+            ["\u963B\u585E\u76EE\u5F55", settings.blockerFolder || "\u672A\u914D\u7F6E"]
+          ];
+          const metrics = [
+            ["Vault Markdown", vaultMarkdown],
+            ["\u8FDB\u5165\u6A21\u578B", model.files.length],
+            ["\u539F\u59CB\u672A\u5B8C\u6210", model.allOpenCount],
+            ["\u89C4\u5219\u8FC7\u6EE4", model.hiddenCount],
+            ["\u6765\u6E90\u9650\u6D41", model.cappedCount],
+            ["\u6709\u6548\u5F85\u529E", model.openTasks.length],
+            ["\u4EE3\u7801\u5757", model.code ? model.code.blocks : "\u672A\u542F\u7528"],
+            ["\u5F85\u5904\u7406", model.digest ? model.digest.length : "\u672A\u542F\u7528"],
+            ["\u6700\u8FD1\u9879\u76EE", model.recent ? model.recent.length : "\u672A\u542F\u7528"],
+            ["\u626B\u63CF\u8017\u65F6", `${model.scanMs || 0}ms`]
+          ];
+          const warnings = [];
+          if (settings.workRoot && !this.app.vault.getAbstractFileByPath(this.normalize(settings.workRoot))) warnings.push(`\u626B\u63CF\u6839\u76EE\u5F55\u4E0D\u5B58\u5728\uFF1A${settings.workRoot}`);
+          if (vaultMarkdown > 0 && model.files.length === 0) warnings.push("Vault \u6709 Markdown\uFF0C\u4F46\u5F53\u524D\u6A21\u578B\u4E3A 0\uFF1B\u8BF7\u68C0\u67E5\u626B\u63CF\u8303\u56F4\u6216\u7D22\u5F15\u72B6\u6001\u3002");
+          return div({ cls: ["desk-diagnostics-overlay", "desk-recycle-overlay"], onClick: (event) => {
+            if (event.target && event.target.classList.contains("desk-diagnostics-overlay")) {
+              this.diagnosticsOpen = false;
+              this.rerender();
+            }
+          } }, [el("aside", { cls: ["desk-diagnostics-drawer", "desk-recycle-drawer"], attr: { role: "dialog", "aria-label": "Desk \u6570\u636E\u8BCA\u65AD" } }, [
+            div({ cls: "desk-recycle-head" }, [
+              div({}, [span({ text: "DESK" }), el("h2", { text: "\u6570\u636E\u8BCA\u65AD" })]),
+              button({ cls: "desk-head-btn", text: "\u5173\u95ED", onClick: () => {
+                this.diagnosticsOpen = false;
+                this.rerender();
+              } })
+            ]),
+            warnings.length ? div({ cls: "desk-diagnostics-warnings" }, warnings.map((text) => el("p", { text }))) : null,
+            div({ cls: "desk-diagnostics-grid" }, metrics.map(([label, value]) => div({}, [span({ text: label }), el("b", { text: String(value) })]))),
+            el("section", { cls: "desk-diagnostics-sources" }, [
+              el("h3", { text: "\u6570\u636E\u6765\u6E90\u914D\u7F6E" }),
+              ...sources.map(([label, value]) => div({}, [span({ text: label }), el("code", { text: String(value) })]))
+            ]),
+            el("p", { cls: "desk-recycle-note", text: "\u201C\u672A\u914D\u7F6E\u201D\u4E0E\u201C\u5DF2\u914D\u7F6E\u4F46\u6CA1\u6709\u6570\u636E\u201D\u662F\u4E0D\u540C\u72B6\u6001\u3002\u8BCA\u65AD\u53EA\u8BFB\u53D6\u7EDF\u8BA1\uFF0C\u4E0D\u4FEE\u6539\u4EFB\u4F55\u7B14\u8BB0\u3002" })
+          ])]);
+        }
         renderHero(ctx) {
           const { model, settings, now } = ctx;
           const today = dateKey(now);
@@ -3431,6 +3511,10 @@ ${body}
                 span({ cls: "desk-dot" }),
                 span({ text: `\u672C\u5730\u626B\u63CF ${model.files.length} \u7BC7` }),
                 button({ cls: "desk-head-btn", text: "\u5237\u65B0", onClick: () => this.hardRefresh() }),
+                button({ cls: "desk-head-btn", text: "\u6570\u636E\u8BCA\u65AD", onClick: () => {
+                  this.diagnosticsOpen = true;
+                  this.rerender();
+                } }),
                 this.renderItemVaultButton()
               ]),
               div({ cls: "desk-pills" }, [
@@ -3789,7 +3873,7 @@ var require_plugin = __commonJS({
           this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleRefresh()));
           this.registerEvent(this.app.metadataCache.on("resolved", () => this.scheduleRefresh()));
           this.app.workspace.onLayoutReady(() => {
-            if (this.settings.firstRun) this.runFirstRunDetection();
+            if (this.settings.firstRun) this.finishFirstRunSetup();
             if (this.settings.autoOpen && !this.app.workspace.getLeavesOfType(VIEW_TYPE).length) {
               this.openDesk(false);
             }
@@ -3818,30 +3902,10 @@ var require_plugin = __commonJS({
             await this.saveData(this.settings);
           }
         }
-        /**
-         * On a brand-new install, guess this vault's layout so the first render shows
-         * real data instead of six "configure me" boxes.
-         */
-        async runFirstRunDetection() {
-          const folders = this.app.vault.getAllLoadedFiles().filter((file) => file.children).map((file) => file.path).filter((path) => path && path !== "/");
-          const counts = {};
-          this.app.vault.getMarkdownFiles().forEach((file) => {
-            let dir = file.path.split("/").slice(0, -1).join("/");
-            while (dir) {
-              counts[dir] = (counts[dir] || 0) + 1;
-              dir = dir.split("/").slice(0, -1).join("/");
-            }
-          });
-          const detected = detectLayout(folders, counts);
-          const applied = Object.entries(detected).filter(([, value]) => value);
-          applied.forEach(([key, value]) => {
-            this.settings[key] = value;
-          });
+        /** A fresh install keeps semantic paths blank until the user explicitly confirms them. */
+        async finishFirstRunSetup() {
           this.settings.firstRun = false;
           await this.saveData(this.settings);
-          if (applied.length) {
-            new Notice(`Desk\uFF1A\u8BC6\u522B\u5230 ${applied.length} \u4E2A\u76EE\u5F55\uFF0C\u5DF2\u81EA\u52A8\u914D\u7F6E\u3002\u8BBE\u7F6E\u91CC\u53EF\u4EE5\u6539\u3002`, 8e3);
-          }
           await this.refreshViews();
         }
         async applyTemplate(id) {

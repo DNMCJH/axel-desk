@@ -12,14 +12,19 @@ const { itemSignature } = require('../item-state');
 
 const activeCard = {
   id: 'active',
-  label: '进行中的线',
+  label: '进行中的项目',
   kicker: 'IN FLIGHT',
   span: 'half',
-  desc: '跨天未闭环的工作线，停滞会标红；直接跳到该线的 STATE.md',
-  templates: ['general'],
+  desc: '按已配置项目目录展示进行中项目，停滞会标红',
+  templates: [],
   needs: ['active', 'streak'],
   render(ctx) {
     const { model, view, settings, data } = ctx;
+    const configured = String(settings.activeFolder || '').trim();
+    if (!configured) {
+      return [ui.cardHead('IN FLIGHT', '进行中的项目'),
+        ui.unconfigured('尚未配置进行中的项目。', '请选择项目根目录；Desk 不会把 Vault 根目录自动当成项目。')];
+    }
     const streams = model.active || [];
     let body;
     if (!streams.length) {
@@ -34,7 +39,7 @@ const activeCard = {
         meta: `${stream.notes} 篇 · 最后动于 ${stream.latest ? ageLabel(stream.idle) : '未知'}${stream.statePath ? ' · 有 STATE' : ''}`,
         icon: '',
         dismiss: {
-          cardId: 'active', cardLabel: '进行中的线', id: stream.path,
+          cardId: 'active', cardLabel: '进行中的项目', id: stream.path,
           label: stream.name, sourcePaths: [stream.statePath || (stream.newest && stream.newest.path) || stream.path],
           signature: itemSignature([stream.path, stream.notes, stream.latest, stream.statePath]),
         },
@@ -47,7 +52,7 @@ const activeCard = {
       })), null, 'desk-stream-list');
     }
     return [
-      ui.cardHead('IN FLIGHT', '进行中的线', [
+      ui.cardHead('IN FLIGHT', '进行中的项目', [
         { label: '打开目录', onClick: () => view.plugin.revealFolder(settings.activeFolder) },
       ]),
       body,

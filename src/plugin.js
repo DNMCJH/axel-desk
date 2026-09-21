@@ -46,7 +46,7 @@ function makePlugin(obsidian) {
       this.registerEvent(this.app.metadataCache.on('resolved', () => this.scheduleRefresh()));
 
       this.app.workspace.onLayoutReady(() => {
-        if (this.settings.firstRun) this.runFirstRunDetection();
+        if (this.settings.firstRun) this.finishFirstRunSetup();
         if (this.settings.autoOpen && !this.app.workspace.getLeavesOfType(VIEW_TYPE).length) {
           this.openDesk(false);
         }
@@ -85,31 +85,10 @@ function makePlugin(obsidian) {
       }
     }
 
-    /**
-     * On a brand-new install, guess this vault's layout so the first render shows
-     * real data instead of six "configure me" boxes.
-     */
-    async runFirstRunDetection() {
-      const folders = this.app.vault.getAllLoadedFiles()
-        .filter((file) => file.children)
-        .map((file) => file.path)
-        .filter((path) => path && path !== '/');
-      const counts = {};
-      this.app.vault.getMarkdownFiles().forEach((file) => {
-        let dir = file.path.split('/').slice(0, -1).join('/');
-        while (dir) {
-          counts[dir] = (counts[dir] || 0) + 1;
-          dir = dir.split('/').slice(0, -1).join('/');
-        }
-      });
-      const detected = detectLayout(folders, counts);
-      const applied = Object.entries(detected).filter(([, value]) => value);
-      applied.forEach(([key, value]) => { this.settings[key] = value; });
+    /** A fresh install keeps semantic paths blank until the user explicitly confirms them. */
+    async finishFirstRunSetup() {
       this.settings.firstRun = false;
       await this.saveData(this.settings);
-      if (applied.length) {
-        new Notice(`Desk：识别到 ${applied.length} 个目录，已自动配置。设置里可以改。`, 8000);
-      }
       await this.refreshViews();
     }
 
