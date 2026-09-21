@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { requireWithStub, makeApp } = require('./harness');
 const stub = require('./obsidian_stub');
+const { DeskData } = require('../src/scan');
 
 const ROOT = path.resolve(__dirname, '..');
 let passed = 0;
@@ -25,9 +26,16 @@ function walk(dir) {
 }
 
 async function main() {
+  const slashNote = { path: 'Notes/a.md', name: 'a.md', basename: 'a', extension: 'md', stat: { mtime: Date.now(), ctime: Date.now() } };
+  const slashImage = { path: 'Images/a.png', name: 'a.png', basename: 'a', extension: 'png', stat: { mtime: Date.now(), ctime: Date.now() } };
+  const slashApp = { vault: { getMarkdownFiles: () => [slashNote], getFiles: () => [slashNote, slashImage], getAbstractFileByPath: () => null }, metadataCache: { getFileCache: () => null } };
+  const slashData = new DeskData(slashApp, { workRoot: '', dailyFolder: '', inboxFolder: '', researchFolder: '', blockerFolder: '', galleryFolder: '', projectFolder: '', activeFolder: '', templateFolder: '', noteExcludes: '', heatWeeks: 1 }, { normalize: (value) => value ? value : '/' });
+  assert(slashData.markdownFiles().length === 1, 'empty work root scans the whole Vault under slash-normalizing hosts');
+  assert(slashData.digestQueue([slashNote]).length === 0, 'empty semantic sources stay unconfigured under slash-normalizing hosts');
+
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   assert(manifest.id === 'axel-desk', 'manifest id');
-  assert(manifest.version === '0.2.0-rc.1', 'public version');
+  assert(manifest.version === '0.2.0-rc.2', 'public version');
   const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
   assert(/theme-dark[\s\S]*background:\s*#17181a/.test(css), 'dark host surface and scrollbar track are explicit');
   assert(/desk-card-active > \.desk-sub:last-child\s*\{[^}]*flex:\s*0 0 auto/.test(css),

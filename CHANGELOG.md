@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0-rc.2
+
+- RC2: preserve blank optional paths before host normalization so an empty scope means the whole Vault and empty semantic sources stay unconfigured.
+- Add slash-normalizing host regression coverage.
+
 ## 0.2.0-rc.1
 
 - RC: general defaults now use low-semantic-risk cards only.

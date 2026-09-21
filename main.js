@@ -960,8 +960,12 @@ var require_scan = __commonJS({
       in(path, folder) {
         return inFolder(path, folder, this.normalize);
       }
+      configuredPath(value) {
+        const raw = String(value != null ? value : "").trim();
+        return raw ? this.normalize(raw) : "";
+      }
       markdownFiles() {
-        const root = this.normalize(this.settings.workRoot || "");
+        const root = this.configuredPath(this.settings.workRoot);
         return this.app.vault.getMarkdownFiles().filter((file) => !root || this.in(file.path, root));
       }
       folderExists(path) {
@@ -1091,7 +1095,7 @@ var require_scan = __commonJS({
       }
       /** Which of the last N days have a daily report file. */
       dailyStreak(span = 14) {
-        const folder = this.normalize(this.settings.dailyFolder || "");
+        const folder = this.configuredPath(this.settings.dailyFolder);
         if (!folder) return [];
         const reports = /* @__PURE__ */ new Map();
         this.app.vault.getMarkdownFiles().filter((file) => this.in(file.path, folder)).forEach((file) => {
@@ -1177,8 +1181,8 @@ var require_scan = __commonJS({
       }
       /** Inbox + recent research that has not been filed yet. */
       digestQueue(files) {
-        const inbox = this.normalize(this.settings.inboxFolder || "");
-        const research = this.normalize(this.settings.researchFolder || "");
+        const inbox = this.configuredPath(this.settings.inboxFolder);
+        const research = this.configuredPath(this.settings.researchFolder);
         return files.filter((file) => this.in(file.path, inbox) || this.in(file.path, research)).filter((file) => this.isHumanNote(file)).sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, 8).map((file) => ({
           title: file.basename,
           path: file.path,
@@ -1202,7 +1206,7 @@ var require_scan = __commonJS({
        * capping in the scanner is what made stale items unreachable, not fewer.
        */
       openBlockers(files) {
-        const folder = this.normalize(this.settings.blockerFolder || "");
+        const folder = this.configuredPath(this.settings.blockerFolder);
         if (!folder) return [];
         const now = Date.now();
         return files.filter((file) => this.in(file.path, folder)).map((file) => {
@@ -1250,8 +1254,8 @@ var require_scan = __commonJS({
        * and "never connects" is the plugin's core promise. The pictures are yours.
        */
       galleryImages() {
-        const folder = this.normalize(this.settings.galleryFolder || "");
-        const root = this.normalize(this.settings.workRoot || "");
+        const folder = this.configuredPath(this.settings.galleryFolder);
+        const root = this.configuredPath(this.settings.workRoot);
         const all = this.app.vault.getFiles ? this.app.vault.getFiles() : [];
         const allImages = all.filter((file) => IMAGE_EXT.test(file.name || ""));
         const scopedImages = allImages.filter((file) => !root || this.in(file.path, root));
@@ -1444,7 +1448,7 @@ var require_scan = __commonJS({
       }
       /** Reusable document shells from a templates folder. */
       scanAssetFolder(files, folder, kind) {
-        const root = this.normalize(folder || "");
+        const root = this.configuredPath(folder);
         if (!root) return [];
         return files.filter((file) => this.in(file.path, root)).filter((file) => this.isHumanNote(file)).map((file) => ({
           name: file.basename,
@@ -1480,7 +1484,7 @@ var require_scan = __commonJS({
       }
       /** Recently touched project/research notes, for "where was I". */
       recentWork(files) {
-        const roots = [this.settings.projectFolder, this.settings.activeFolder, this.settings.researchFolder].map((folder) => this.normalize(folder || "")).filter(Boolean);
+        const roots = [this.settings.projectFolder, this.settings.activeFolder, this.settings.researchFolder].map((folder) => this.configuredPath(folder)).filter(Boolean);
         return files.filter((file) => roots.some((root) => this.in(file.path, root))).filter((file) => this.isHumanNote(file)).sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, 6).map((file) => ({
           title: file.basename,
           path: file.path,
