@@ -3797,11 +3797,13 @@ var require_plugin = __commonJS({
           ["modify", "create", "delete", "rename"].forEach((event) => {
             this.registerEvent(this.app.vault.on(event, () => this.scheduleRefresh()));
           });
+          this.registerEvent(this.app.metadataCache.on("resolved", () => this.scheduleRefresh()));
           this.app.workspace.onLayoutReady(() => {
             if (this.settings.firstRun) this.runFirstRunDetection();
             if (this.settings.autoOpen && !this.app.workspace.getLeavesOfType(VIEW_TYPE).length) {
               this.openDesk(false);
             }
+            this.startupRefreshTimer = window.setTimeout(() => this.refreshViews(), 2500);
           });
         }
         async loadSettings() {
@@ -3862,6 +3864,7 @@ var require_plugin = __commonJS({
         }
         onunload() {
           window.clearTimeout(this.refreshTimer);
+          window.clearTimeout(this.startupRefreshTimer);
         }
         async saveSettings() {
           await this.saveData(this.settings);

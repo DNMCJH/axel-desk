@@ -41,11 +41,15 @@ function makePlugin(obsidian) {
         this.registerEvent(this.app.vault.on(event, () => this.scheduleRefresh()));
       });
 
+      // Recompute after Obsidian finishes its all-note metadata index.
+      this.registerEvent(this.app.metadataCache.on('resolved', () => this.scheduleRefresh()));
+
       this.app.workspace.onLayoutReady(() => {
         if (this.settings.firstRun) this.runFirstRunDetection();
         if (this.settings.autoOpen && !this.app.workspace.getLeavesOfType(VIEW_TYPE).length) {
           this.openDesk(false);
         }
+        this.startupRefreshTimer = window.setTimeout(() => this.refreshViews(), 2500);
       });
     }
 
@@ -119,6 +123,7 @@ function makePlugin(obsidian) {
 
     onunload() {
       window.clearTimeout(this.refreshTimer);
+      window.clearTimeout(this.startupRefreshTimer);
     }
 
     async saveSettings() {

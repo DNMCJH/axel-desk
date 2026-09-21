@@ -27,7 +27,7 @@ function walk(dir) {
 async function main() {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   assert(manifest.id === 'axel-desk', 'manifest id');
-  assert(manifest.version === '0.1.1', 'public version');
+  assert(manifest.version === '0.1.2', 'public version');
   const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
   assert(/theme-dark[\s\S]*background:\s*#17181a/.test(css), 'dark host surface and scrollbar track are explicit');
 
@@ -57,6 +57,12 @@ async function main() {
 
     const DeskPlugin = requireWithStub(path.join(ROOT, 'main.js'));
     const { app } = makeApp(vault, { maxDepth: 10 });
+    let metadataResolved = null;
+    const originalMetadataOn = app.metadataCache.on.bind(app.metadataCache);
+    app.metadataCache.on = (name, callback) => {
+      if (name === 'resolved') metadataResolved = callback;
+      return originalMetadataOn(name, callback);
+    };
     const plugin = new DeskPlugin(app, manifest);
     await plugin.onload();
     const view = plugin._views.get('desk-home')({ app, view: null });
@@ -80,7 +86,20 @@ async function main() {
     plugin.settings.itemStates[key].closedAt = '2026-07-01T00:00:00.000Z';
     await view.maintainItemStates(new Date('2026-09-20T00:00:00.000Z'));
     assert(plugin.settings.itemStates[key].state === 'archived', '30-day automatic archive');
+    assert(typeof metadataResolved === 'function', 'subscribes to metadataCache resolved');
+    const completeModel = view.data.cache;
+    view.data.cache = {
+      ...completeModel,
+      files: [], tasks: [], openTasks: [], allOpenCount: 0,
+      code: { languages: [], total: 0, blocks: 0, recent: [], fresh: [] },
+    };
+    app.workspace.getLeavesOfType = (type) => type === 'desk-home' ? [{ view }] : [];
+    plugin.scheduleRefresh = () => plugin.refreshViews();
+    await metadataResolved();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    assert(view.data.cache.code.blocks > 0, 'resolved event repopulates an empty startup model');
     await view.onClose();
+    plugin.onunload();
   } finally {
     fs.rmSync(vault, { recursive: true, force: true });
   }

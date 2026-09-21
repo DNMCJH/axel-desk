@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Refresh the dashboard automatically after Obsidian finishes indexing all note metadata.
+- Recover from an empty startup scan without requiring users to create or edit a note.
+- Add a finite startup refresh fallback and regression coverage for stale empty models.
+
 ## 0.1.1
 
 - Fix the light scrollbar gutter that appeared beside Desk in dark mode.
