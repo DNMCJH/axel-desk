@@ -92,11 +92,11 @@ async function main() {
     plugin.settings.itemStates[key].closedAt = '2026-07-01T00:00:00.000Z';
     await view.maintainItemStates(new Date('2026-09-20T00:00:00.000Z'));
     assert(plugin.settings.itemStates[key].state === 'archived', '30-day automatic archive');
+    const completeModel = view.data.cache;
     assert(typeof metadataResolved === 'function', 'subscribes to metadataCache resolved');
     assert(typeof metadataChanged === 'function', 'subscribes to metadataCache changed');
     assert(completeModel.openTasks.length > 0, 'reads tasks when metadata hints omit list items');
     assert(completeModel.code.blocks > 0, 'reads code when metadata hints omit sections');
-    const completeModel = view.data.cache;
     view.data.cache = {
       ...completeModel,
       files: [], tasks: [], openTasks: [], allOpenCount: 0,
