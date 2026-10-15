@@ -7,6 +7,7 @@ const registry = require('./registry');
 const { registerAll } = require('./cards');
 const { dateKey, setFrontmatterField } = require('./util');
 const { TASK_LINE } = require('./tasks');
+const { normalizeManualTasks, groupTaskFiles, taskFileItem, manualTaskItem } = require('./task-board');
 const itemState = require('./item-state');
 const { validateVaultFolderPath } = require('./cards/gallery');
 
@@ -40,8 +41,22 @@ function makeView({ ItemView, Notice, normalizePath }) {
       this.normalize = normalizePath;
       this.data = new DeskData(this.app, plugin.settings, { normalize: normalizePath });
       this.selectedDate = dateKey(new Date());
-      // open on my own work, not the whole pile
+      // Retained for legacy consumers; the task card no longer infers ownership.
       this.taskScope = 'all';
+      this.taskFilesLimit = 0;
+      this.manualTaskDraft = '';
+      this.manualTaskEditId = '';
+      this.manualTaskSaving = false;
+      this.pendingEditorRender = false;
+      this.editorRenderTimer = 0;
+      this.editorBlurHandler = () => {
+        if (!this.pendingEditorRender) return;
+        window.clearTimeout(this.editorRenderTimer);
+        this.editorRenderTimer = window.setTimeout(() => {
+          if (!this.activeTextEditor()) this.rerender();
+        }, 0);
+      };
+      this.containerEl.addEventListener('focusout', this.editorBlurHandler);
       this.pinnedCache = null;
       this.arsenalGroup = 'skills';
       this.galleryPickerOpen = false;
@@ -80,6 +95,10 @@ function makeView({ ItemView, Notice, normalizePath }) {
     }
 
     async onClose() {
+      const scratch = this.containerEl.querySelector('.desk-card-scratch textarea');
+      if (scratch) await this.flushScratchSave(scratch.value);
+      this.containerEl.removeEventListener('focusout', this.editorBlurHandler);
+      window.clearTimeout(this.editorRenderTimer);
       if (this.paneObserver) {
         this.paneObserver.disconnect();
         this.paneObserver = null;
@@ -196,6 +215,78 @@ function makeView({ ItemView, Notice, normalizePath }) {
           view.editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
         }
       }
+    }
+
+    activeTextEditor() {
+      const active = this.containerEl.ownerDocument.activeElement;
+      return active && this.containerEl.contains(active)
+        && active.matches('.desk-scratch, .desk-manual-input') ? active : null;
+    }
+
+    deferWhileEditing() {
+      if (!this.activeTextEditor()) return false;
+      this.pendingEditorRender = true;
+      return true;
+    }
+
+    async saveManualTasks(next, onSaved = () => {}) {
+      if (this.manualTaskSaving) return false;
+      this.manualTaskSaving = true;
+      const previous = this.plugin.settings.manualTasks;
+      this.plugin.settings.manualTasks = normalizeManualTasks(next);
+      try {
+        await this.plugin.saveData(this.plugin.settings);
+      } catch (error) {
+        this.plugin.settings.manualTasks = previous;
+        this.notice('个人待办保存失败，内容未提交：' + error.message);
+        return false;
+      } finally {
+        this.manualTaskSaving = false;
+      }
+      onSaved();
+      await this.plugin.refreshViews();
+      await this.rerender();
+      return true;
+    }
+
+    async addManualTask(text) {
+      const value = String(text || '').trim();
+      if (!value) return false;
+      const id = typeof globalThis.crypto?.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+      return this.saveManualTasks([
+        ...normalizeManualTasks(this.plugin.settings.manualTasks), { id, text: value, done: false },
+      ], () => { this.manualTaskDraft = ''; this.manualTaskEditId = ''; });
+    }
+
+    async editManualTask(id, text) {
+      const value = String(text || '').trim();
+      const tasks = normalizeManualTasks(this.plugin.settings.manualTasks);
+      if (!value || !tasks.some((task) => task.id === id)) return false;
+      return this.saveManualTasks(tasks.map((task) => task.id === id ? { ...task, text: value } : task),
+        () => { this.manualTaskDraft = ''; this.manualTaskEditId = ''; });
+    }
+
+    async toggleManualTask(id) {
+      const tasks = normalizeManualTasks(this.plugin.settings.manualTasks);
+      if (!tasks.some((task) => task.id === id)) return false;
+      return this.saveManualTasks(tasks.map((task) => task.id === id ? { ...task, done: !task.done } : task));
+    }
+
+    async startManualTaskEdit(task) {
+      this.manualTaskDraft = task.text;
+      this.manualTaskEditId = task.id;
+      await this.rerender();
+      const input = this.containerEl.querySelector('.desk-manual-input');
+      input?.focus();
+      input?.select();
+    }
+
+    async cancelManualTaskEdit() {
+      this.containerEl.querySelector('.desk-manual-input')?.blur();
+      this.manualTaskDraft = '';
+      this.manualTaskEditId = '';
+      await this.rerender();
     }
 
     /** Toggle a checkbox in its source file, then refresh. */
@@ -474,6 +565,8 @@ function makeView({ ItemView, Notice, normalizePath }) {
     }
 
     async render({ preserveScroll = false } = {}) {
+      if (this.deferWhileEditing()) return;
+      this.pendingEditorRender = false;
       // Coalesce: a burst of vault events must not queue N full rebuilds.
       if (this.rendering) { this.pendingRender = true; return; }
       this.rendering = true;
@@ -510,6 +603,10 @@ function makeView({ ItemView, Notice, normalizePath }) {
         // Narrow-pane styling keys off this, not a media query: the window can be
         // wide while this pane is 600px, and that is the common case in Obsidian.
         const paneWidth = this.paneWidth();
+        const topGallery = this.plugin.settings.galleryMode !== 'grid'
+          ? cards.find((card) => card.id === 'gallery') : null;
+        const gridCards = topGallery
+          ? registry.layout(cards.filter((card) => card.id !== 'gallery').map((card) => card.id), cols) : cards;
         const root = div({
           cls: 'desk-root',
           attr: {
@@ -522,6 +619,7 @@ function makeView({ ItemView, Notice, normalizePath }) {
           div({ cls: 'desk-wash desk-wash-three' }),
           el('main', { cls: 'desk-shell' }, [
             this.renderHero(ctx),
+            topGallery ? this.renderTopGallery(topGallery, ctx) : null,
             this.renderDock(ctx),
             el('section', {
               cls: 'desk-grid',
@@ -532,7 +630,7 @@ function makeView({ ItemView, Notice, normalizePath }) {
                 '--desk-cols': String(cols),
                 '--desk-card-max': `${maxVh}vh`,
               },
-            }, cards.map((card) => this.renderCard(card, ctx))),
+            }, gridCards.map((card) => this.renderCard(card, ctx))),
             this.renderFooter(ctx),
           ]),
           this.renderItemVault(),
@@ -540,6 +638,8 @@ function makeView({ ItemView, Notice, normalizePath }) {
           this.renderTextPreview(),
         ]);
 
+        // Focus may have moved into an editor while the asynchronous scan ran.
+        if (this.deferWhileEditing()) return;
         fill(container, root);
         if (preserveScroll) {
           container.scrollTop = outerTop;
@@ -560,6 +660,15 @@ function makeView({ ItemView, Notice, normalizePath }) {
     }
 
     /** One card, wrapped in its article shell. Errors are contained per card. */
+    renderTopGallery(card, ctx) {
+      try {
+        return el('section', { cls: 'desk-gallery-top' }, card.render(ctx));
+      } catch (error) {
+        console.error('[desk] banner failed to render', error);
+        return el('section', { cls: 'desk-gallery-top' }, ui.empty('图片暂时无法显示。'));
+      }
+    }
+
     renderCard(card, ctx) {
       const cls = [
         'desk-card',
@@ -695,7 +804,7 @@ function makeView({ ItemView, Notice, normalizePath }) {
       this.galleryTimer = window.setInterval(() => {
         if (typeof document !== 'undefined' && document.hidden) return;
         this.galleryPage = (this.galleryPage + 1) % pages;
-        this.rerender();
+        if (!this.paintGalleryPage()) this.rerender();
       }, seconds * 1000);
     }
 
@@ -703,19 +812,45 @@ function makeView({ ItemView, Notice, normalizePath }) {
       if (pages <= 1) return;
       this.galleryPage = (this.galleryPage + delta + pages) % pages;
       this.clearGalleryRotation();
-      this.rerender();
+      if (this.paintGalleryPage()) this.configureGalleryRotation(pages, 1);
+      else this.rerender();
+    }
+
+    paintGalleryPage() {
+      const root = this.containerEl.querySelector('.desk-carousel');
+      if (!root) return false;
+      const slides = root.querySelectorAll('[data-slide-index]');
+      slides.forEach((slide, index) => {
+        const active = index === this.galleryPage;
+        slide.classList.toggle('is-active', active);
+        slide.setAttribute('aria-hidden', active ? 'false' : 'true');
+        slide.tabIndex = active ? 0 : -1;
+      });
+      root.querySelectorAll('[data-carousel-dot]').forEach((dot, index) => {
+        dot.classList.toggle('is-active', index === this.galleryPage);
+        dot.setAttribute('aria-pressed', index === this.galleryPage ? 'true' : 'false');
+      });
+      root.querySelector('.desk-carousel-status').textContent = (this.galleryPage + 1) + ' / ' + slides.length;
+      const paused = this.galleryPaused || this.plugin.settings.galleryAutoRotate === false;
+      const pause = root.querySelector('.desk-carousel-pause');
+      pause.textContent = paused ? '▶' : 'Ⅱ';
+      pause.title = paused ? '继续轮播' : '暂停轮播';
+      pause.setAttribute('aria-label', pause.title);
+      return true;
     }
 
     async toggleGalleryRotation() {
       if (this.plugin.settings.galleryAutoRotate === false) {
         this.plugin.settings.galleryAutoRotate = true;
         this.galleryPaused = false;
-        await this.plugin.saveSettings();
+        await this.plugin.saveData(this.plugin.settings);
       } else {
         this.galleryPaused = !this.galleryPaused;
       }
       this.clearGalleryRotation();
-      this.rerender();
+      if (this.paintGalleryPage()) {
+        this.configureGalleryRotation(this.containerEl.querySelectorAll('.desk-carousel-slide').length, 1);
+      } else this.rerender();
     }
 
     itemStates() {
@@ -757,10 +892,19 @@ function makeView({ ItemView, Notice, normalizePath }) {
     }
 
     async closeItem(item) {
+      const previous = this.plugin.settings.itemStates;
       this.plugin.settings.itemStates = itemState.closeItem(this.itemStates(), item, new Date());
-      await this.plugin.saveSettings();
+      try {
+        await this.plugin.saveData(this.plugin.settings);
+      } catch (error) {
+        this.plugin.settings.itemStates = previous;
+        this.notice('移除保存失败，条目仍保留：' + error.message);
+        return false;
+      }
+      await this.plugin.refreshViews();
       this.notice('已移入 Desk 回收站；不会删除源文件');
       await this.rerender();
+      return true;
     }
 
     async restoreItem(key) {
@@ -864,7 +1008,8 @@ function makeView({ ItemView, Notice, normalizePath }) {
         ['研究目录', settings.researchFolder || '未配置'], ['项目目录', settings.projectFolder || '未配置'],
         ['进行中项目', settings.activeFolder || '未配置'], ['阻塞目录', settings.blockerFolder || '未配置']];
       const metrics = [['Vault Markdown', vaultMarkdown], ['进入模型', model.files.length], ['原始未完成', model.allOpenCount],
-        ['规则过滤', model.hiddenCount], ['来源限流', model.cappedCount], ['有效待办', model.openTasks.length],
+        ['台历规则过滤', model.hiddenCount], ['台历来源限流', model.cappedCount], ['台历候选复选框', model.openTasks.length],
+        ['待办文件', this.taskBoardCounts(model).files], ['个人待办', this.taskBoardCounts(model).personal],
         ['代码块', model.code ? model.code.blocks : '未启用'], ['待处理', model.digest ? model.digest.length : '未启用'],
         ['最近项目', model.recent ? model.recent.length : '未启用'], ['扫描耗时', `${model.scanMs || 0}ms`]];
       const warnings = [];
@@ -883,6 +1028,14 @@ function makeView({ ItemView, Notice, normalizePath }) {
       ])]);
     }
 
+    taskBoardCounts(model) {
+      const visible = (item) => !itemState.itemVisibility(this.plugin.settings.itemStates, item).hidden;
+      return {
+        files: groupTaskFiles(model.tasks, this.plugin.settings).filter((file) => visible(taskFileItem(file))).length,
+        personal: normalizeManualTasks(this.plugin.settings.manualTasks).filter((task) => !task.done && visible(manualTaskItem(task))).length,
+      };
+    }
+
     renderHero(ctx) {
       const { model, settings, now } = ctx;
       const today = dateKey(now);
@@ -896,6 +1049,7 @@ function makeView({ ItemView, Notice, normalizePath }) {
         return due && due <= today;
       }).length;
       const stale = (model.active || []).filter((stream) => stream.stale).length;
+      const taskBoard = this.taskBoardCounts(model);
       const template = registry.TEMPLATES.find((item) => item.id === (settings.template || 'general'));
 
       // Optional background, resolved from a vault file. getResourcePath turns a
@@ -923,8 +1077,9 @@ function makeView({ ItemView, Notice, normalizePath }) {
           div({ cls: 'desk-pills' }, [
             span({ cls: dueToday ? 'is-warn' : '', text: `${dueToday} 条到期` }),
             span({ cls: stale ? 'is-warn' : '', text: `${stale} 条停滞` }),
-            span({ text: `${model.openTasks.length} 条待办` }),
-            model.hiddenCount ? span({ cls: 'is-muted', text: `已滤 ${model.hiddenCount}` }) : null,
+            span({ text: `${taskBoard.personal} 条个人待办` }),
+            span({ text: `${taskBoard.files} 份待办文件` }),
+
           ]),
         ]),
       ]);
@@ -977,8 +1132,9 @@ function makeView({ ItemView, Notice, normalizePath }) {
 
     renderFooter(ctx) {
       const { model } = ctx;
+      const taskBoard = this.taskBoardCounts(model);
       const bits = [
-        `${model.openTasks.length} 待办`,
+        `${taskBoard.personal} 个人待办 · ${taskBoard.files} 份待办文件`,
         model.active ? `${model.active.length} 条在飞` : null,
         model.code ? `${model.code.blocks} 个代码块` : null,
         model.scanMs ? `扫描 ${model.scanMs}ms` : null,

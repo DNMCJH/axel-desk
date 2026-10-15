@@ -19,6 +19,52 @@ const RATIOS = {
   landscape: '4 / 3',
 };
 
+function slideshow(gallery, view, settings, togglePicker) {
+  const count = gallery.items.length;
+  const current = Math.min(Number(view.galleryPage) || 0, count - 1);
+  const root = el('section', { cls: 'desk-carousel', attr: { 'aria-label': '图片轮播' } });
+  const slides = gallery.items.map((item, index) => {
+    const src = view.resolveImage(item.path);
+    const position = /art-veil\.jpg$/i.test(item.path) ? '50% 45%'
+      : /art-dress\.jpg$/i.test(item.path) ? '50% 44%' : '50% 50%';
+    return button({
+      cls: ['desk-carousel-slide', index === current ? 'is-active' : ''],
+      title: item.path, ariaLabel: '打开图片：' + item.name,
+      attr: { 'data-slide-index': index, 'aria-hidden': index !== current ? 'true' : 'false', tabindex: index === current ? '0' : '-1' },
+      onClick: () => view.openFile(item.path),
+    }, [src ? el('img', { attr: { src, alt: item.name, draggable: 'false' }, style: { 'object-position': position } })
+      : span({ text: '图片已移动' })]);
+  });
+  root.appendChild(div({ cls: 'desk-carousel-track' }, slides));
+  root.appendChild(div({ cls: 'desk-banner-caption' }, [
+    el('em', { text: '生活 · 求知 · 远行' }),
+    el('strong', { text: '好好生活，认真求知，走自己的路。' }),
+  ]));
+  const paused = view.galleryPaused || settings.galleryAutoRotate === false;
+  root.appendChild(div({ cls: 'desk-carousel-controls', attr: { role: 'group', 'aria-label': '轮播控制' } }, [
+    button({ cls: 'desk-carousel-arrow', text: '‹', ariaLabel: '上一张', title: '上一张',
+      onClick: () => view.shiftGalleryPage(-1, count) }),
+    div({ cls: 'desk-carousel-dots' }, gallery.items.map((item, index) => button({
+      cls: ['desk-carousel-dot', index === current ? 'is-active' : ''],
+      ariaLabel: '第 ' + (index + 1) + ' 张：' + item.name, title: item.name,
+      attr: { 'data-carousel-dot': index, 'aria-pressed': index === current ? 'true' : 'false' },
+      onClick: () => view.shiftGalleryPage(index - view.galleryPage, count),
+    }))),
+    button({ cls: 'desk-carousel-arrow', text: '›', ariaLabel: '下一张', title: '下一张',
+      onClick: () => view.shiftGalleryPage(1, count) }),
+    button({ cls: 'desk-carousel-pause', text: paused ? '▶' : 'Ⅱ',
+      ariaLabel: paused ? '继续轮播' : '暂停轮播', title: paused ? '继续轮播' : '暂停轮播',
+      onClick: () => view.toggleGalleryRotation() }),
+  ]));
+  root.appendChild(button({ cls: 'desk-carousel-settings', text: '···',
+    ariaLabel: '更换图片目录', title: '更换图片目录', onClick: togglePicker }));
+  root.appendChild(span({ cls: 'desk-carousel-status', text: (current + 1) + ' / ' + count,
+    attr: { 'aria-live': 'off' } }));
+  if (!view.galleryPickerOpen) view.configureGalleryRotation(count, 1);
+  else view.clearGalleryRotation();
+  return root;
+}
+
 const SYSTEM_SEGMENTS = new Set(['.obsidian', '.git', '.trash', 'node_modules']);
 
 function isImage(name) {
@@ -131,7 +177,7 @@ const galleryCard = {
   kicker: 'VISUAL',
   span: 'full',
   grow: 'compact',
-  desc: '把 Vault 里的图片铺成一面墙。指一个目录，点开即大图',
+  desc: '本地图片单图轮播或多图网格，支持手动切换与暂停',
   templates: ['general', 'study'],
   needs: ['gallery'],
   render(ctx) {
@@ -177,6 +223,13 @@ const galleryCard = {
         pickerOpen
           ? renderPicker()
           : ui.empty(`${gallery.folder} 里还没有图片。`, '可以保留这个空目录并往里面放图，或者换一个目录。'),
+      ];
+    }
+
+    if (settings.galleryMode !== 'grid') {
+      return [
+        slideshow(gallery, view, settings, togglePicker),
+        pickerOpen ? renderPicker() : null,
       ];
     }
 

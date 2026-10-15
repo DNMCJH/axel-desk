@@ -20,7 +20,7 @@ Then ask the user to enable **Axel Desk** in Community plugins. Do not reload or
 - It does not connect to the network.
 - Recycle-bin and archive actions affect only plugin display state.
 - It does not expose source-file deletion.
-- Never copy another user's `data.json`; let first-run detection propose paths.
+- Never copy another user's `data.json`; let the plugin initialize its own settings and leave optional folder paths unconfigured.
 
 ## Useful settings
 

@@ -1,6 +1,7 @@
 'use strict';
 
 const { DEFAULTS } = require('./settings');
+const { normalizeManualTasks } = require('./task-board');
 const { detectLayout } = require('./settings');
 const { makeView, VIEW_TYPE } = require('./view');
 const { makeSettingTab } = require('./settingtab');
@@ -65,6 +66,7 @@ function makePlugin(obsidian) {
       });
       const isFresh = Object.keys(saved).length === 0;
       this.settings = Object.assign({}, DEFAULTS, saved);
+      this.settings.manualTasks = normalizeManualTasks(this.settings.manualTasks);
       this.settings.firstRun = isFresh;
 
       if (isFresh) {
@@ -136,18 +138,20 @@ function makePlugin(obsidian) {
     /** Quick actions adapt to which folders this vault actually has. */
     quickActions() {
       const actions = [];
-      if (this.settings.dailyFolder) {
+      const folderExists = (path) => {
+        const node = path && this.app.vault.getAbstractFileByPath(normalizePath(path));
+        return Boolean(node && node.children);
+      };
+      if (folderExists(this.settings.dailyFolder)) {
         actions.push({ id: 'daily-report', label: '写今天的日报', desc: '打开或新建当天日报' });
         actions.push({ id: 'daily-draft', label: '今天的草稿箱', desc: '定位当天 drafts 目录' });
       }
-      if (this.settings.activeFolder) {
+      if (folderExists(this.settings.activeFolder)) {
         actions.push({ id: 'open-active', label: '进行中的线', desc: '跨天未闭环的工作' });
       }
-      if (this.settings.inboxFolder) {
+      if (folderExists(this.settings.inboxFolder)) {
         actions.push({ id: 'open-inbox', label: '收件箱', desc: '待归类的材料' });
       }
-      actions.push({ id: 'git-sync', label: 'Git 同步', desc: '调用 obsidian-git 提交并推送' });
-      actions.push({ id: 'terminal', label: '打开终端', desc: '调用 terminal 插件' });
       return actions;
     }
 
@@ -199,8 +203,6 @@ function makePlugin(obsidian) {
       }
       if (id === 'open-active') { this.revealFolder(this.settings.activeFolder); return undefined; }
       if (id === 'open-inbox') { this.revealFolder(this.settings.inboxFolder); return undefined; }
-      if (id === 'git-sync') { this.invokeCommand(/^obsidian-git:.*(sync|Sync)/, 'obsidian-git 未启用'); return undefined; }
-      if (id === 'terminal') { this.invokeCommand(/^terminal:.*(integrated|current)/, 'terminal 插件未启用'); return undefined; }
       return undefined;
     }
 

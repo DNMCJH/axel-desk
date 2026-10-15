@@ -7,128 +7,104 @@
 
 const ui = require('../ui');
 const { el, div, span, button } = require('../dom');
-const { dateKey, ageLabel, inFolder } = require('../util');
-const { sortTasks } = require('../tasks');
+const { dateKey, ageLabel } = require('../util');
+const { groupTaskFiles, taskFileItem, normalizeManualTasks, manualTaskItem } = require('../task-board');
 const { itemSignature } = require('../item-state');
 
-const TASK_SCOPES = [
-  { key: 'mine', label: '我的' },
-  { key: 'waiting', label: '等人' },
-  { key: 'due', label: '到期' },
-  { key: 'active', label: '进行中' },
-  { key: 'all', label: '常用' },
-  { key: 'raw', label: '全部' },
-];
-
-/**
- * Where a task lives, phrased usefully.
- * A bare "STATE" or "2026-09-17_日报" tells you nothing, so name the workstream
- * (the parent folder) instead when the filename is bookkeeping or a date.
- */
-function taskSource(task) {
-  const name = task.basename || '';
-  const folder = task.path.split('/').slice(-2, -1)[0] || '';
-  const uninformative = /^(STATE|STATUS|README|INDEX|MANIFEST|CHECKPOINT)$/i.test(name)
-    || /^\d{4}-\d{2}-\d{2}/.test(name);
-  return uninformative && folder ? folder : name;
+function renderManualTask(task, view) {
+  const item = manualTaskItem(task);
+  if (view.isItemHidden(item)) return null;
+  return div({ cls: 'desk-manual-task', attr: { 'data-task-id': task.id } }, [
+    ui.checkRow({
+      text: task.text, done: task.done,
+      onToggle: () => view.toggleManualTask(task.id),
+      onOpen: () => view.startManualTaskEdit(task),
+    }),
+    button({ cls: 'desk-head-btn desk-manual-edit', text: '编辑', onClick: () => view.startManualTaskEdit(task) }),
+    button({
+      cls: 'desk-head-btn desk-manual-remove', text: '移除',
+      title: '移入 Desk 回收站，可恢复；不修改任何笔记',
+      onClick: () => view.closeItem(item),
+    }),
+  ]);
 }
 
-function taskMeta(task, today) {
-  const due = task.due || task.scheduled;
-  const overdue = due && due < today;
-  const isToday = due === today;
-  const parts = [];
-  if (due) {
-    parts.push(el('em', {
-      cls: overdue ? 'is-overdue' : isToday ? 'is-today' : '',
-      text: overdue ? `逾期 ${due}` : isToday ? '今天' : due,
-    }));
-  }
-  if (task.owner === 'other') {
-    parts.push(el('em', { cls: 'is-waiting', text: `等 ${task.who || '他人'}` }));
-  }
-  const source = taskSource(task);
-  if (source) parts.push(span({ cls: 'desk-task-src', text: source }));
-  // interleave separators so the meta line reads as "a · b · c"
-  return parts.flatMap((node, index) => (index ? [span({ cls: 'desk-sep', text: '·' }), node] : [node]));
-}
-
-function renderTaskList(ctx) {
-  const { model, settings, view } = ctx;
-  const today = dateKey(new Date());
-  const limit = Number(settings.taskLimit || 12);
-  const scope = view.taskScope;
-  let tasks = model.openTasks;
-  if (scope === 'raw') {
-    // escape hatch: every open checkbox, filters bypassed
-    tasks = sortTasks(model.tasks.filter((task) => !task.done && !task.cancelled), today);
-  } else if (scope === 'mine') {
-    tasks = tasks.filter((task) => task.owner === 'me');
-  } else if (scope === 'waiting') {
-    tasks = tasks.filter((task) => task.owner === 'other');
-  } else if (scope === 'due') {
-    tasks = tasks.filter((task) => {
-      const due = task.due || task.scheduled;
-      return due && due <= today;
-    });
-  } else if (scope === 'active') {
-    tasks = tasks.filter((task) => inFolder(task.path, settings.activeFolder, view.normalize));
-  }
-  const shown = tasks.slice(0, limit);
-  const parts = [];
-  if (model.hiddenCount || model.cappedCount) {
-    const bits = [];
-    if (model.hiddenCount) bits.push(`已过滤 ${model.hiddenCount} 条陈旧/非任务复选框`);
-    // Capped items are relevant, just crowded out — say so differently.
-    if (model.cappedCount) bits.push(`${model.cappedCount} 条来自同一笔记未展开`);
-    parts.push(ui.note(
-      `${bits.join(' · ')}（共 ${model.allOpenCount} 条未完成）`,
-      { label: '规则', onClick: () => view.explainFilters() },
-    ));
-  }
-  if (!shown.length) {
-    parts.push(ui.empty(
-      '这个范围里没有待办。',
-      model.hiddenCount ? '放宽设置里的「待办最大天数」可以看到更多。' : '要么真做完了，要么该去笔记里记一条。',
-    ));
-    return parts;
-  }
-  parts.push(div({ cls: 'desk-task-list desk-fill' }, shown.map((task) => ui.checkRow({
-    text: task.text,
-    done: task.done,
-    meta: taskMeta(task, today),
-    tone: [`desk-p-${task.priority}`, task.owner === 'other' ? 'is-waiting' : ''],
-    onToggle: () => view.toggleTask(task),
-    onOpen: () => view.openFile(task.path, task.line),
-  }))));
-  if (tasks.length > limit) {
-    parts.push(ui.note(`还有 ${tasks.length - limit} 条未显示`));
-  }
-  return parts;
+function renderManualTasks(view, settings) {
+  const tasks = normalizeManualTasks(settings.manualTasks).filter((task) => !view.isItemHidden(manualTaskItem(task)));
+  const open = tasks.filter((task) => !task.done);
+  const done = tasks.filter((task) => task.done);
+  const input = el('input', {
+    cls: 'desk-manual-input',
+    attr: { type: 'text', placeholder: '写一条你准备做的事，按 Enter 添加', 'aria-label': '个人待办内容' },
+  });
+  input.value = view.manualTaskDraft || '';
+  let composing = false;
+  input.addEventListener('compositionstart', () => { composing = true; });
+  input.addEventListener('compositionend', () => { composing = false; view.manualTaskDraft = input.value; });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && (event.isComposing || composing || event.keyCode === 229)) event.preventDefault();
+  });
+  input.addEventListener('input', () => { view.manualTaskDraft = input.value; });
+  const form = el('form', { cls: 'desk-manual-form' }, [
+    input,
+    el('button', { cls: 'desk-head-btn', text: view.manualTaskEditId ? '保存' : '添加', attr: { type: 'submit' } }),
+    view.manualTaskEditId ? el('button', {
+      cls: 'desk-head-btn', text: '取消', attr: { type: 'button' }, onClick: () => view.cancelManualTaskEdit(),
+    }) : null,
+  ]);
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (composing || event.isComposing || !input.value.trim()) return;
+    input.blur();
+    if (view.manualTaskEditId) view.editManualTask(view.manualTaskEditId, input.value);
+    else view.addManualTask(input.value);
+  });
+  return div({ cls: 'desk-personal-tasks' }, [
+    div({ cls: 'desk-sub-head', text: '个人待办 · ' + open.length + ' 项' }),
+    form,
+    ui.rowList(open.map((task) => renderManualTask(task, view)), ui.empty('还没有自己梳理的待办。'), 'desk-manual-list', { fill: false }),
+    done.length ? el('details', { cls: 'desk-manual-completed' }, [
+      el('summary', { text: '已完成 · ' + done.length + ' 项' }),
+      ...done.map((task) => renderManualTask(task, view)),
+    ]) : null,
+  ]);
 }
 
 const todayCard = {
-  id: 'today',
-  label: '待办',
-  kicker: 'TODAY',
-  span: 'half',
-  desc: '按归属分流的待办清单，可直接勾选',
-  templates: ['general', 'study'],
-  needs: [],
+  id: 'today', label: '待办', kicker: 'TODAY', span: 'half',
+  desc: '含待办的文件与自己梳理的待办；移除只影响 Desk，可从回收站恢复',
+  templates: ['general', 'study'], needs: [],
   render(ctx) {
-    const { model, view } = ctx;
-    const options = TASK_SCOPES.map((item) => ({
-      key: item.key,
-      label: item.key === 'mine' && model.mineCount ? `我的 ${model.mineCount}`
-        : item.key === 'waiting' && model.waitingCount ? `等人 ${model.waitingCount}`
-          : item.label,
-    }));
+    const { model, view, settings } = ctx;
+    const files = groupTaskFiles(model.tasks, settings).filter((file) => !view.isItemHidden(taskFileItem(file)));
+    const limit = view.taskFilesLimit || Math.max(1, Number(settings.taskLimit) || 12);
+    const rows = files.slice(0, limit).map((file) => {
+      const row = ui.listRow({
+        title: file.name, meta: file.path, badge: file.count + ' 项未完成',
+        dismiss: taskFileItem(file), view,
+        onClick: () => view.openFile(file.path, file.line),
+      });
+      if (row) {
+        row.classList.add('desk-task-file');
+        row.querySelector('.desk-row-toggle').setAttribute('aria-label', '移除文件：' + file.name);
+        row.querySelector('.desk-row-toggle').title = '仅从 Desk 移除，可从回收站恢复；不删除文件、不勾选原文任务';
+      }
+      return row;
+    });
     return [
-      div({ cls: 'desk-card-head' }, [
-        div({}, [span({ text: 'TODAY' }), el('h2', { text: '待办' })]),
-        ui.segmented(options, view.taskScope, (key) => view.setTaskScope(key)),
+      ui.cardHead('TODAY', '待办', [{ label: '恢复已移除', onClick: () => view.openItemVault('closed') }]),
+      div({ cls: 'desk-task-board desk-fill' }, [
+        renderManualTasks(view, settings),
+        div({ cls: 'desk-sub desk-task-file-section' }, [
+          div({ cls: 'desk-sub-head', text: '含待办的文件 · ' + files.length + ' 份' }),
+          ui.note('数量仅表示未完成复选框，不代表今天必须做；不需要的文件可自主移除。'),
+          ui.rowList(rows, ui.empty('没有待展示的文件。', '已移除的文件可以从 Desk 回收站恢复。'), 'desk-task-files', { fill: false }),
+          files.length > limit ? button({
+            cls: 'desk-head-btn desk-task-files-more', text: '显示更多（还有 ' + (files.length - limit) + ' 份）',
+            onClick: () => { view.taskFilesLimit = limit + Math.max(1, Number(settings.taskLimit) || 12); view.rerender(); },
+          }) : null,
+        ]),
       ]),
-      ...renderTaskList(ctx),
     ];
   },
 };

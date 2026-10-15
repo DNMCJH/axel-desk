@@ -1,11 +1,11 @@
 {
   "name": "obsidian-axel-desk",
-  "version": "0.2.0-rc.3",
+  "version": "0.2.0-rc.7",
   "description": "Local-first Obsidian dashboard for general productivity and computer science study.",
   "main": "main.js",
   "scripts": {
     "build": "node esbuild.config.js",
-    "test": "node test/public.test.js",
+    "test": "node test/public.test.js && node test/task-board.test.js && node test/task-board.test.js --bundle && node test/desktop-entry-gallery.test.js && node test/desktop-entry-gallery.test.js --bundle",
     "pack": "node pack.js"
   },
   "keywords": [

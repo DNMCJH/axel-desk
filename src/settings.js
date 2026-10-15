@@ -24,6 +24,7 @@ const DEFAULTS = {
    * the folder worth looking at; the card explains itself until they do.
    */
   galleryFolder: '',
+  galleryMode: 'slideshow',
   galleryCount: 6,
   galleryAutoRotate: true,
   galleryRotateSeconds: 8,
@@ -33,6 +34,8 @@ const DEFAULTS = {
 
   // Reversible dashboard cleanup. These records never delete or edit source files.
   itemStates: {},
+  // Explicitly curated personal tasks, separate from Markdown source checkboxes.
+  manualTasks: [],
   // Closed items move to archive when Desk next opens/refreshes after this many days. 0 = never.
   trashArchiveDays: 30,
 
@@ -46,7 +49,7 @@ const DEFAULTS = {
   // rather than stopping at a fixed pixel height.
   cardMaxVh: 72,
   displayName: '',
-  dailyMessage: '把难的事拆小，然后一件一件做完。',
+  dailyMessage: '读书，做事，也看沿途风景。',
   autoOpen: true,
   cards: '',
 

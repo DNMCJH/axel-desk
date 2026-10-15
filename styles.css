@@ -1528,3 +1528,266 @@
 .mod-right-split .desk-grid { grid-template-columns: minmax(0, 1fr); }
 .mod-left-split .desk-card,
 .mod-right-split .desk-card { grid-column: 1 / -1; }
+
+
+/* Personal task board: keep full source names and paths readable in narrow panes. */
+.desk-root .desk-task-board {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+}
+.desk-root .desk-manual-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.desk-root input.desk-manual-input {
+  flex: 1 1 180px;
+  min-width: 0;
+  width: 100%;
+}
+.desk-root .desk-manual-task {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.desk-root .desk-manual-task > .desk-task {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.desk-root .desk-manual-completed > summary {
+  cursor: pointer;
+  margin: 10px 0;
+}
+.desk-root .desk-task-file {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+}
+.desk-root .desk-task-file .desk-row-toggle {
+  grid-column: 1;
+  grid-row: 1;
+}
+.desk-root .desk-task-file .desk-row-main {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+.desk-root .desk-task-file .desk-row-body strong,
+.desk-root .desk-task-file .desk-row-body small {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: unset;
+}
+.desk-root .desk-task-file .desk-row-badge {
+  grid-column: 2;
+  justify-self: end;
+  margin-left: 0;
+}
+.desk-root .desk-task-file-section > .desk-note {
+  margin: 8px 0;
+}
+
+/* Reference banner proportions and overlay alignment; slides update in place. */
+.desk-root .desk-gallery-top {
+  min-width: 0;
+  width: 100%;
+  margin: 0 0 22px;
+}
+.desk-root .desk-carousel {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3.25 / 1;
+  min-height: 190px;
+  max-height: 330px;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 0;
+  background: #f2eee9;
+  box-shadow: 0 16px 45px rgba(67, 49, 39, .07);
+}
+.desk-root .desk-carousel-track,
+.desk-root button.desk-carousel-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+.desk-root button.desk-carousel-slide {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: scale(1.025);
+  transition: opacity .85s ease, transform 5.8s ease;
+}
+.desk-root button.desk-carousel-slide.is-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: scale(1);
+}
+.desk-root .desk-carousel-slide img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  object-fit: cover;
+}
+.desk-root .desk-carousel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(20, 17, 15, .32), transparent 58%),
+    linear-gradient(0deg, rgba(20, 17, 15, .22), transparent 50%);
+}
+.desk-root .desk-banner-caption {
+  position: absolute;
+  z-index: 2;
+  left: 28px;
+  bottom: 25px;
+  max-width: calc(100% - 290px);
+  color: #fff;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, .2);
+  pointer-events: none;
+}
+.desk-root .desk-banner-caption em,
+.desk-root .desk-banner-caption strong {
+  display: block;
+  font-style: normal;
+  letter-spacing: 0;
+  /* The active note snippet assigns formatted-text colors with !important. */
+  color: #fff !important;
+}
+.desk-root .desk-banner-caption em {
+  font-size: 9px;
+  font-weight: 700;
+  opacity: .8;
+  margin-bottom: 7px;
+}
+.desk-root .desk-banner-caption strong {
+  font-family: Georgia, 'Kaiti SC', 'KaiTi', serif;
+  font-size: 22px;
+  line-height: 1.45;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.desk-root .desk-carousel-controls {
+  position: absolute;
+  z-index: 3;
+  right: 20px;
+  bottom: 19px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  height: 28px;
+}
+.desk-root .desk-carousel-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+}
+.desk-root .desk-carousel button.desk-carousel-dot {
+  display: block;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 22px;
+  min-width: 12px;
+  min-height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  position: relative;
+}
+.desk-root .desk-carousel-dot::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, .55);
+}
+.desk-root .desk-carousel-dot.is-active::before { left: 0; width: 18px; background: #fff; }
+.desk-root .desk-carousel button.desk-carousel-arrow,
+.desk-root .desk-carousel button.desk-carousel-pause,
+.desk-root .desk-carousel button.desk-carousel-settings {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-radius: 50%;
+  background: rgba(30, 25, 22, .2);
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+  box-shadow: none;
+  backdrop-filter: blur(8px);
+}
+.desk-root .desk-carousel button.desk-carousel-pause { font-size: 12px; }
+.desk-root .desk-carousel button.desk-carousel-settings {
+  position: absolute;
+  z-index: 3;
+  top: 16px;
+  right: 20px;
+}
+.desk-root .desk-carousel-status {
+  position: absolute;
+  z-index: 2;
+  top: 22px;
+  left: 28px;
+  color: rgba(255, 255, 255, .85);
+  font-size: 11px;
+}
+.desk-root .desk-carousel button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.desk-root[data-pane="narrow"] .desk-carousel {
+  aspect-ratio: 2 / 1;
+  min-height: 180px;
+  border-radius: 18px;
+}
+.desk-root[data-pane="narrow"] .desk-banner-caption {
+  left: 18px;
+  bottom: 60px;
+  max-width: calc(100% - 36px);
+}
+.desk-root[data-pane="narrow"] .desk-banner-caption strong { font-size: 18px; }
+.desk-root[data-pane="narrow"] .desk-carousel-controls { right: 18px; bottom: 16px; }
+.desk-root[data-pane="narrow"] .desk-carousel-status { left: 18px; top: 18px; }
+@media (prefers-reduced-motion: reduce) {
+  .desk-root button.desk-carousel-slide { transition: none; transform: none; }
+}

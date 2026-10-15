@@ -35,7 +35,9 @@ async function main() {
 
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   assert(manifest.id === 'axel-desk', 'manifest id');
-  assert(manifest.version === '0.2.0-rc.3', 'public version');
+  const packageVersion = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+  const versions = JSON.parse(fs.readFileSync(path.join(ROOT, 'versions.json'), 'utf8'));
+  assert(manifest.version === packageVersion && versions[manifest.version] === manifest.minAppVersion, 'release metadata versions agree');
   const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
   assert(/theme-dark[\s\S]*background:\s*#17181a/.test(css), 'dark host surface and scrollbar track are explicit');
   assert(/desk-card-active > \.desk-sub:last-child\s*\{[^}]*flex:\s*0 0 auto/.test(css),

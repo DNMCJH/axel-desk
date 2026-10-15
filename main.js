@@ -240,6 +240,7 @@ var require_settings = __commonJS({
        * the folder worth looking at; the card explains itself until they do.
        */
       galleryFolder: "",
+      galleryMode: "slideshow",
       galleryCount: 6,
       galleryAutoRotate: true,
       galleryRotateSeconds: 8,
@@ -248,6 +249,8 @@ var require_settings = __commonJS({
       galleryRatio: "square",
       // Reversible dashboard cleanup. These records never delete or edit source files.
       itemStates: {},
+      // Explicitly curated personal tasks, separate from Markdown source checkboxes.
+      manualTasks: [],
       // Closed items move to archive when Desk next opens/refreshes after this many days. 0 = never.
       trashArchiveDays: 30,
       // Editable cards. scratchText lives in settings on purpose: it is meant to be
@@ -260,7 +263,7 @@ var require_settings = __commonJS({
       // rather than stopping at a fixed pixel height.
       cardMaxVh: 72,
       displayName: "",
-      dailyMessage: "\u628A\u96BE\u7684\u4E8B\u62C6\u5C0F\uFF0C\u7136\u540E\u4E00\u4EF6\u4E00\u4EF6\u505A\u5B8C\u3002",
+      dailyMessage: "\u8BFB\u4E66\uFF0C\u505A\u4E8B\uFF0C\u4E5F\u770B\u6CBF\u9014\u98CE\u666F\u3002",
       autoOpen: true,
       cards: "",
       // folders — blank means "this vault does not have one"
@@ -381,6 +384,69 @@ var require_settings = __commonJS({
       detectWorkRoot,
       detectLayout
     };
+  }
+});
+
+// src/task-board.js
+var require_task_board = __commonJS({
+  "src/task-board.js"(exports2, module2) {
+    "use strict";
+    var { parseList } = require_util();
+    function excludedTaskFile(path, settings) {
+      const normalized = String(path || "").replace(/\\/g, "/");
+      if (/(^|\/)(_history|_archive|templates?|node_modules|\.git|\.obsidian)(\/|$)/i.test(normalized)) return true;
+      return parseList(settings.taskExcludes).some((fragment) => normalized.includes(fragment));
+    }
+    function groupTaskFiles(tasks, settings = {}) {
+      const groups = /* @__PURE__ */ new Map();
+      (tasks || []).forEach((task) => {
+        if (!task.path || task.done || task.cancelled || excludedTaskFile(task.path, settings)) return;
+        if (!groups.has(task.path)) {
+          groups.set(task.path, {
+            path: task.path,
+            name: task.path.split("/").pop(),
+            count: 0,
+            line: task.line,
+            mtime: task.mtime || 0
+          });
+        }
+        const group = groups.get(task.path);
+        group.count += 1;
+        group.line = Math.min(group.line, task.line);
+      });
+      return [...groups.values()].sort((a, b) => b.mtime - a.mtime || a.path.localeCompare(b.path));
+    }
+    function taskFileItem(file) {
+      return {
+        cardId: "task-files",
+        cardLabel: "\u542B\u5F85\u529E\u7684\u6587\u4EF6",
+        id: file.path,
+        label: file.name,
+        sourcePaths: [file.path],
+        // Explicitly removed files stay removed even when their tasks change.
+        signature: file.path
+      };
+    }
+    function normalizeManualTasks(value) {
+      if (!Array.isArray(value)) return [];
+      const seen = /* @__PURE__ */ new Set();
+      return value.filter((task) => task && typeof task.id === "string" && task.id.trim() && typeof task.text === "string" && task.text.trim()).filter((task) => {
+        if (seen.has(task.id)) return false;
+        seen.add(task.id);
+        return true;
+      }).map((task) => ({ id: task.id, text: task.text.trim(), done: task.done === true }));
+    }
+    function manualTaskItem(task) {
+      return {
+        cardId: "manual-tasks",
+        cardLabel: "\u4E2A\u4EBA\u5F85\u529E",
+        id: task.id,
+        label: task.text,
+        sourcePaths: [],
+        signature: task.id
+      };
+    }
+    module2.exports = { excludedTaskFile, groupTaskFiles, taskFileItem, normalizeManualTasks, manualTaskItem };
   }
 });
 
@@ -1638,112 +1704,124 @@ var require_core = __commonJS({
     "use strict";
     var ui = require_ui();
     var { el, div, span, button } = require_dom();
-    var { dateKey, ageLabel, inFolder } = require_util();
-    var { sortTasks } = require_tasks();
+    var { dateKey, ageLabel } = require_util();
+    var { groupTaskFiles, taskFileItem, normalizeManualTasks, manualTaskItem } = require_task_board();
     var { itemSignature } = require_item_state();
-    var TASK_SCOPES = [
-      { key: "mine", label: "\u6211\u7684" },
-      { key: "waiting", label: "\u7B49\u4EBA" },
-      { key: "due", label: "\u5230\u671F" },
-      { key: "active", label: "\u8FDB\u884C\u4E2D" },
-      { key: "all", label: "\u5E38\u7528" },
-      { key: "raw", label: "\u5168\u90E8" }
-    ];
-    function taskSource(task) {
-      const name = task.basename || "";
-      const folder = task.path.split("/").slice(-2, -1)[0] || "";
-      const uninformative = /^(STATE|STATUS|README|INDEX|MANIFEST|CHECKPOINT)$/i.test(name) || /^\d{4}-\d{2}-\d{2}/.test(name);
-      return uninformative && folder ? folder : name;
+    function renderManualTask(task, view) {
+      const item = manualTaskItem(task);
+      if (view.isItemHidden(item)) return null;
+      return div({ cls: "desk-manual-task", attr: { "data-task-id": task.id } }, [
+        ui.checkRow({
+          text: task.text,
+          done: task.done,
+          onToggle: () => view.toggleManualTask(task.id),
+          onOpen: () => view.startManualTaskEdit(task)
+        }),
+        button({ cls: "desk-head-btn desk-manual-edit", text: "\u7F16\u8F91", onClick: () => view.startManualTaskEdit(task) }),
+        button({
+          cls: "desk-head-btn desk-manual-remove",
+          text: "\u79FB\u9664",
+          title: "\u79FB\u5165 Desk \u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF1B\u4E0D\u4FEE\u6539\u4EFB\u4F55\u7B14\u8BB0",
+          onClick: () => view.closeItem(item)
+        })
+      ]);
     }
-    function taskMeta(task, today) {
-      const due = task.due || task.scheduled;
-      const overdue = due && due < today;
-      const isToday = due === today;
-      const parts = [];
-      if (due) {
-        parts.push(el("em", {
-          cls: overdue ? "is-overdue" : isToday ? "is-today" : "",
-          text: overdue ? `\u903E\u671F ${due}` : isToday ? "\u4ECA\u5929" : due
-        }));
-      }
-      if (task.owner === "other") {
-        parts.push(el("em", { cls: "is-waiting", text: `\u7B49 ${task.who || "\u4ED6\u4EBA"}` }));
-      }
-      const source = taskSource(task);
-      if (source) parts.push(span({ cls: "desk-task-src", text: source }));
-      return parts.flatMap((node, index) => index ? [span({ cls: "desk-sep", text: "\xB7" }), node] : [node]);
-    }
-    function renderTaskList(ctx) {
-      const { model, settings, view } = ctx;
-      const today = dateKey(/* @__PURE__ */ new Date());
-      const limit = Number(settings.taskLimit || 12);
-      const scope = view.taskScope;
-      let tasks = model.openTasks;
-      if (scope === "raw") {
-        tasks = sortTasks(model.tasks.filter((task) => !task.done && !task.cancelled), today);
-      } else if (scope === "mine") {
-        tasks = tasks.filter((task) => task.owner === "me");
-      } else if (scope === "waiting") {
-        tasks = tasks.filter((task) => task.owner === "other");
-      } else if (scope === "due") {
-        tasks = tasks.filter((task) => {
-          const due = task.due || task.scheduled;
-          return due && due <= today;
-        });
-      } else if (scope === "active") {
-        tasks = tasks.filter((task) => inFolder(task.path, settings.activeFolder, view.normalize));
-      }
-      const shown = tasks.slice(0, limit);
-      const parts = [];
-      if (model.hiddenCount || model.cappedCount) {
-        const bits = [];
-        if (model.hiddenCount) bits.push(`\u5DF2\u8FC7\u6EE4 ${model.hiddenCount} \u6761\u9648\u65E7/\u975E\u4EFB\u52A1\u590D\u9009\u6846`);
-        if (model.cappedCount) bits.push(`${model.cappedCount} \u6761\u6765\u81EA\u540C\u4E00\u7B14\u8BB0\u672A\u5C55\u5F00`);
-        parts.push(ui.note(
-          `${bits.join(" \xB7 ")}\uFF08\u5171 ${model.allOpenCount} \u6761\u672A\u5B8C\u6210\uFF09`,
-          { label: "\u89C4\u5219", onClick: () => view.explainFilters() }
-        ));
-      }
-      if (!shown.length) {
-        parts.push(ui.empty(
-          "\u8FD9\u4E2A\u8303\u56F4\u91CC\u6CA1\u6709\u5F85\u529E\u3002",
-          model.hiddenCount ? "\u653E\u5BBD\u8BBE\u7F6E\u91CC\u7684\u300C\u5F85\u529E\u6700\u5927\u5929\u6570\u300D\u53EF\u4EE5\u770B\u5230\u66F4\u591A\u3002" : "\u8981\u4E48\u771F\u505A\u5B8C\u4E86\uFF0C\u8981\u4E48\u8BE5\u53BB\u7B14\u8BB0\u91CC\u8BB0\u4E00\u6761\u3002"
-        ));
-        return parts;
-      }
-      parts.push(div({ cls: "desk-task-list desk-fill" }, shown.map((task) => ui.checkRow({
-        text: task.text,
-        done: task.done,
-        meta: taskMeta(task, today),
-        tone: [`desk-p-${task.priority}`, task.owner === "other" ? "is-waiting" : ""],
-        onToggle: () => view.toggleTask(task),
-        onOpen: () => view.openFile(task.path, task.line)
-      }))));
-      if (tasks.length > limit) {
-        parts.push(ui.note(`\u8FD8\u6709 ${tasks.length - limit} \u6761\u672A\u663E\u793A`));
-      }
-      return parts;
+    function renderManualTasks(view, settings) {
+      const tasks = normalizeManualTasks(settings.manualTasks).filter((task) => !view.isItemHidden(manualTaskItem(task)));
+      const open = tasks.filter((task) => !task.done);
+      const done = tasks.filter((task) => task.done);
+      const input = el("input", {
+        cls: "desk-manual-input",
+        attr: { type: "text", placeholder: "\u5199\u4E00\u6761\u4F60\u51C6\u5907\u505A\u7684\u4E8B\uFF0C\u6309 Enter \u6DFB\u52A0", "aria-label": "\u4E2A\u4EBA\u5F85\u529E\u5185\u5BB9" }
+      });
+      input.value = view.manualTaskDraft || "";
+      let composing = false;
+      input.addEventListener("compositionstart", () => {
+        composing = true;
+      });
+      input.addEventListener("compositionend", () => {
+        composing = false;
+        view.manualTaskDraft = input.value;
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.isComposing || composing || event.keyCode === 229)) event.preventDefault();
+      });
+      input.addEventListener("input", () => {
+        view.manualTaskDraft = input.value;
+      });
+      const form = el("form", { cls: "desk-manual-form" }, [
+        input,
+        el("button", { cls: "desk-head-btn", text: view.manualTaskEditId ? "\u4FDD\u5B58" : "\u6DFB\u52A0", attr: { type: "submit" } }),
+        view.manualTaskEditId ? el("button", {
+          cls: "desk-head-btn",
+          text: "\u53D6\u6D88",
+          attr: { type: "button" },
+          onClick: () => view.cancelManualTaskEdit()
+        }) : null
+      ]);
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (composing || event.isComposing || !input.value.trim()) return;
+        input.blur();
+        if (view.manualTaskEditId) view.editManualTask(view.manualTaskEditId, input.value);
+        else view.addManualTask(input.value);
+      });
+      return div({ cls: "desk-personal-tasks" }, [
+        div({ cls: "desk-sub-head", text: "\u4E2A\u4EBA\u5F85\u529E \xB7 " + open.length + " \u9879" }),
+        form,
+        ui.rowList(open.map((task) => renderManualTask(task, view)), ui.empty("\u8FD8\u6CA1\u6709\u81EA\u5DF1\u68B3\u7406\u7684\u5F85\u529E\u3002"), "desk-manual-list", { fill: false }),
+        done.length ? el("details", { cls: "desk-manual-completed" }, [
+          el("summary", { text: "\u5DF2\u5B8C\u6210 \xB7 " + done.length + " \u9879" }),
+          ...done.map((task) => renderManualTask(task, view))
+        ]) : null
+      ]);
     }
     var todayCard = {
       id: "today",
       label: "\u5F85\u529E",
       kicker: "TODAY",
       span: "half",
-      desc: "\u6309\u5F52\u5C5E\u5206\u6D41\u7684\u5F85\u529E\u6E05\u5355\uFF0C\u53EF\u76F4\u63A5\u52FE\u9009",
+      desc: "\u542B\u5F85\u529E\u7684\u6587\u4EF6\u4E0E\u81EA\u5DF1\u68B3\u7406\u7684\u5F85\u529E\uFF1B\u79FB\u9664\u53EA\u5F71\u54CD Desk\uFF0C\u53EF\u4ECE\u56DE\u6536\u7AD9\u6062\u590D",
       templates: ["general", "study"],
       needs: [],
       render(ctx) {
-        const { model, view } = ctx;
-        const options = TASK_SCOPES.map((item) => ({
-          key: item.key,
-          label: item.key === "mine" && model.mineCount ? `\u6211\u7684 ${model.mineCount}` : item.key === "waiting" && model.waitingCount ? `\u7B49\u4EBA ${model.waitingCount}` : item.label
-        }));
+        const { model, view, settings } = ctx;
+        const files = groupTaskFiles(model.tasks, settings).filter((file) => !view.isItemHidden(taskFileItem(file)));
+        const limit = view.taskFilesLimit || Math.max(1, Number(settings.taskLimit) || 12);
+        const rows = files.slice(0, limit).map((file) => {
+          const row = ui.listRow({
+            title: file.name,
+            meta: file.path,
+            badge: file.count + " \u9879\u672A\u5B8C\u6210",
+            dismiss: taskFileItem(file),
+            view,
+            onClick: () => view.openFile(file.path, file.line)
+          });
+          if (row) {
+            row.classList.add("desk-task-file");
+            row.querySelector(".desk-row-toggle").setAttribute("aria-label", "\u79FB\u9664\u6587\u4EF6\uFF1A" + file.name);
+            row.querySelector(".desk-row-toggle").title = "\u4EC5\u4ECE Desk \u79FB\u9664\uFF0C\u53EF\u4ECE\u56DE\u6536\u7AD9\u6062\u590D\uFF1B\u4E0D\u5220\u9664\u6587\u4EF6\u3001\u4E0D\u52FE\u9009\u539F\u6587\u4EFB\u52A1";
+          }
+          return row;
+        });
         return [
-          div({ cls: "desk-card-head" }, [
-            div({}, [span({ text: "TODAY" }), el("h2", { text: "\u5F85\u529E" })]),
-            ui.segmented(options, view.taskScope, (key) => view.setTaskScope(key))
-          ]),
-          ...renderTaskList(ctx)
+          ui.cardHead("TODAY", "\u5F85\u529E", [{ label: "\u6062\u590D\u5DF2\u79FB\u9664", onClick: () => view.openItemVault("closed") }]),
+          div({ cls: "desk-task-board desk-fill" }, [
+            renderManualTasks(view, settings),
+            div({ cls: "desk-sub desk-task-file-section" }, [
+              div({ cls: "desk-sub-head", text: "\u542B\u5F85\u529E\u7684\u6587\u4EF6 \xB7 " + files.length + " \u4EFD" }),
+              ui.note("\u6570\u91CF\u4EC5\u8868\u793A\u672A\u5B8C\u6210\u590D\u9009\u6846\uFF0C\u4E0D\u4EE3\u8868\u4ECA\u5929\u5FC5\u987B\u505A\uFF1B\u4E0D\u9700\u8981\u7684\u6587\u4EF6\u53EF\u81EA\u4E3B\u79FB\u9664\u3002"),
+              ui.rowList(rows, ui.empty("\u6CA1\u6709\u5F85\u5C55\u793A\u7684\u6587\u4EF6\u3002", "\u5DF2\u79FB\u9664\u7684\u6587\u4EF6\u53EF\u4EE5\u4ECE Desk \u56DE\u6536\u7AD9\u6062\u590D\u3002"), "desk-task-files", { fill: false }),
+              files.length > limit ? button({
+                cls: "desk-head-btn desk-task-files-more",
+                text: "\u663E\u793A\u66F4\u591A\uFF08\u8FD8\u6709 " + (files.length - limit) + " \u4EFD\uFF09",
+                onClick: () => {
+                  view.taskFilesLimit = limit + Math.max(1, Number(settings.taskLimit) || 12);
+                  view.rerender();
+                }
+              }) : null
+            ])
+          ])
         ];
       }
     };
@@ -2429,6 +2507,73 @@ var require_gallery = __commonJS({
       square: "1 / 1",
       landscape: "4 / 3"
     };
+    function slideshow(gallery, view, settings, togglePicker) {
+      const count = gallery.items.length;
+      const current = Math.min(Number(view.galleryPage) || 0, count - 1);
+      const root = el("section", { cls: "desk-carousel", attr: { "aria-label": "\u56FE\u7247\u8F6E\u64AD" } });
+      const slides = gallery.items.map((item, index) => {
+        const src = view.resolveImage(item.path);
+        const position = /art-veil\.jpg$/i.test(item.path) ? "50% 45%" : /art-dress\.jpg$/i.test(item.path) ? "50% 44%" : "50% 50%";
+        return button({
+          cls: ["desk-carousel-slide", index === current ? "is-active" : ""],
+          title: item.path,
+          ariaLabel: "\u6253\u5F00\u56FE\u7247\uFF1A" + item.name,
+          attr: { "data-slide-index": index, "aria-hidden": index !== current ? "true" : "false", tabindex: index === current ? "0" : "-1" },
+          onClick: () => view.openFile(item.path)
+        }, [src ? el("img", { attr: { src, alt: item.name, draggable: "false" }, style: { "object-position": position } }) : span({ text: "\u56FE\u7247\u5DF2\u79FB\u52A8" })]);
+      });
+      root.appendChild(div({ cls: "desk-carousel-track" }, slides));
+      root.appendChild(div({ cls: "desk-banner-caption" }, [
+        el("em", { text: "\u751F\u6D3B \xB7 \u6C42\u77E5 \xB7 \u8FDC\u884C" }),
+        el("strong", { text: "\u597D\u597D\u751F\u6D3B\uFF0C\u8BA4\u771F\u6C42\u77E5\uFF0C\u8D70\u81EA\u5DF1\u7684\u8DEF\u3002" })
+      ]));
+      const paused = view.galleryPaused || settings.galleryAutoRotate === false;
+      root.appendChild(div({ cls: "desk-carousel-controls", attr: { role: "group", "aria-label": "\u8F6E\u64AD\u63A7\u5236" } }, [
+        button({
+          cls: "desk-carousel-arrow",
+          text: "\u2039",
+          ariaLabel: "\u4E0A\u4E00\u5F20",
+          title: "\u4E0A\u4E00\u5F20",
+          onClick: () => view.shiftGalleryPage(-1, count)
+        }),
+        div({ cls: "desk-carousel-dots" }, gallery.items.map((item, index) => button({
+          cls: ["desk-carousel-dot", index === current ? "is-active" : ""],
+          ariaLabel: "\u7B2C " + (index + 1) + " \u5F20\uFF1A" + item.name,
+          title: item.name,
+          attr: { "data-carousel-dot": index, "aria-pressed": index === current ? "true" : "false" },
+          onClick: () => view.shiftGalleryPage(index - view.galleryPage, count)
+        }))),
+        button({
+          cls: "desk-carousel-arrow",
+          text: "\u203A",
+          ariaLabel: "\u4E0B\u4E00\u5F20",
+          title: "\u4E0B\u4E00\u5F20",
+          onClick: () => view.shiftGalleryPage(1, count)
+        }),
+        button({
+          cls: "desk-carousel-pause",
+          text: paused ? "\u25B6" : "\u2161",
+          ariaLabel: paused ? "\u7EE7\u7EED\u8F6E\u64AD" : "\u6682\u505C\u8F6E\u64AD",
+          title: paused ? "\u7EE7\u7EED\u8F6E\u64AD" : "\u6682\u505C\u8F6E\u64AD",
+          onClick: () => view.toggleGalleryRotation()
+        })
+      ]));
+      root.appendChild(button({
+        cls: "desk-carousel-settings",
+        text: "\xB7\xB7\xB7",
+        ariaLabel: "\u66F4\u6362\u56FE\u7247\u76EE\u5F55",
+        title: "\u66F4\u6362\u56FE\u7247\u76EE\u5F55",
+        onClick: togglePicker
+      }));
+      root.appendChild(span({
+        cls: "desk-carousel-status",
+        text: current + 1 + " / " + count,
+        attr: { "aria-live": "off" }
+      }));
+      if (!view.galleryPickerOpen) view.configureGalleryRotation(count, 1);
+      else view.clearGalleryRotation();
+      return root;
+    }
     var SYSTEM_SEGMENTS = /* @__PURE__ */ new Set([".obsidian", ".git", ".trash", "node_modules"]);
     function isImage(name) {
       return /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(name || "");
@@ -2524,7 +2669,7 @@ var require_gallery = __commonJS({
       kicker: "VISUAL",
       span: "full",
       grow: "compact",
-      desc: "\u628A Vault \u91CC\u7684\u56FE\u7247\u94FA\u6210\u4E00\u9762\u5899\u3002\u6307\u4E00\u4E2A\u76EE\u5F55\uFF0C\u70B9\u5F00\u5373\u5927\u56FE",
+      desc: "\u672C\u5730\u56FE\u7247\u5355\u56FE\u8F6E\u64AD\u6216\u591A\u56FE\u7F51\u683C\uFF0C\u652F\u6301\u624B\u52A8\u5207\u6362\u4E0E\u6682\u505C",
       templates: ["general", "study"],
       needs: ["gallery"],
       render(ctx) {
@@ -2563,6 +2708,12 @@ var require_gallery = __commonJS({
               { label: pickerOpen ? "\u53D6\u6D88" : "\u6362\u76EE\u5F55", onClick: togglePicker }
             ]),
             pickerOpen ? renderPicker() : ui.empty(`${gallery.folder} \u91CC\u8FD8\u6CA1\u6709\u56FE\u7247\u3002`, "\u53EF\u4EE5\u4FDD\u7559\u8FD9\u4E2A\u7A7A\u76EE\u5F55\u5E76\u5F80\u91CC\u9762\u653E\u56FE\uFF0C\u6216\u8005\u6362\u4E00\u4E2A\u76EE\u5F55\u3002")
+          ];
+        }
+        if (settings.galleryMode !== "grid") {
+          return [
+            slideshow(gallery, view, settings, togglePicker),
+            pickerOpen ? renderPicker() : null
           ];
         }
         const pageCount = Math.max(1, Math.ceil(gallery.items.length / limit));
@@ -2664,6 +2815,7 @@ var require_view = __commonJS({
     var { registerAll } = require_cards();
     var { dateKey, setFrontmatterField } = require_util();
     var { TASK_LINE } = require_tasks();
+    var { normalizeManualTasks, groupTaskFiles, taskFileItem, manualTaskItem } = require_task_board();
     var itemState = require_item_state();
     var { validateVaultFolderPath } = require_gallery();
     var VIEW_TYPE = "desk-home";
@@ -2679,6 +2831,20 @@ var require_view = __commonJS({
           this.data = new DeskData(this.app, plugin.settings, { normalize: normalizePath });
           this.selectedDate = dateKey(/* @__PURE__ */ new Date());
           this.taskScope = "all";
+          this.taskFilesLimit = 0;
+          this.manualTaskDraft = "";
+          this.manualTaskEditId = "";
+          this.manualTaskSaving = false;
+          this.pendingEditorRender = false;
+          this.editorRenderTimer = 0;
+          this.editorBlurHandler = () => {
+            if (!this.pendingEditorRender) return;
+            window.clearTimeout(this.editorRenderTimer);
+            this.editorRenderTimer = window.setTimeout(() => {
+              if (!this.activeTextEditor()) this.rerender();
+            }, 0);
+          };
+          this.containerEl.addEventListener("focusout", this.editorBlurHandler);
           this.pinnedCache = null;
           this.arsenalGroup = "skills";
           this.galleryPickerOpen = false;
@@ -2714,6 +2880,10 @@ var require_view = __commonJS({
           this.observePaneWidth();
         }
         async onClose() {
+          const scratch = this.containerEl.querySelector(".desk-card-scratch textarea");
+          if (scratch) await this.flushScratchSave(scratch.value);
+          this.containerEl.removeEventListener("focusout", this.editorBlurHandler);
+          window.clearTimeout(this.editorRenderTimer);
           if (this.paneObserver) {
             this.paneObserver.disconnect();
             this.paneObserver = null;
@@ -2825,6 +2995,80 @@ var require_view = __commonJS({
               view.editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
             }
           }
+        }
+        activeTextEditor() {
+          const active = this.containerEl.ownerDocument.activeElement;
+          return active && this.containerEl.contains(active) && active.matches(".desk-scratch, .desk-manual-input") ? active : null;
+        }
+        deferWhileEditing() {
+          if (!this.activeTextEditor()) return false;
+          this.pendingEditorRender = true;
+          return true;
+        }
+        async saveManualTasks(next, onSaved = () => {
+        }) {
+          if (this.manualTaskSaving) return false;
+          this.manualTaskSaving = true;
+          const previous = this.plugin.settings.manualTasks;
+          this.plugin.settings.manualTasks = normalizeManualTasks(next);
+          try {
+            await this.plugin.saveData(this.plugin.settings);
+          } catch (error) {
+            this.plugin.settings.manualTasks = previous;
+            this.notice("\u4E2A\u4EBA\u5F85\u529E\u4FDD\u5B58\u5931\u8D25\uFF0C\u5185\u5BB9\u672A\u63D0\u4EA4\uFF1A" + error.message);
+            return false;
+          } finally {
+            this.manualTaskSaving = false;
+          }
+          onSaved();
+          await this.plugin.refreshViews();
+          await this.rerender();
+          return true;
+        }
+        async addManualTask(text) {
+          var _a;
+          const value = String(text || "").trim();
+          if (!value) return false;
+          const id = typeof ((_a = globalThis.crypto) == null ? void 0 : _a.randomUUID) === "function" ? globalThis.crypto.randomUUID() : Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+          return this.saveManualTasks([
+            ...normalizeManualTasks(this.plugin.settings.manualTasks),
+            { id, text: value, done: false }
+          ], () => {
+            this.manualTaskDraft = "";
+            this.manualTaskEditId = "";
+          });
+        }
+        async editManualTask(id, text) {
+          const value = String(text || "").trim();
+          const tasks = normalizeManualTasks(this.plugin.settings.manualTasks);
+          if (!value || !tasks.some((task) => task.id === id)) return false;
+          return this.saveManualTasks(
+            tasks.map((task) => task.id === id ? { ...task, text: value } : task),
+            () => {
+              this.manualTaskDraft = "";
+              this.manualTaskEditId = "";
+            }
+          );
+        }
+        async toggleManualTask(id) {
+          const tasks = normalizeManualTasks(this.plugin.settings.manualTasks);
+          if (!tasks.some((task) => task.id === id)) return false;
+          return this.saveManualTasks(tasks.map((task) => task.id === id ? { ...task, done: !task.done } : task));
+        }
+        async startManualTaskEdit(task) {
+          this.manualTaskDraft = task.text;
+          this.manualTaskEditId = task.id;
+          await this.rerender();
+          const input = this.containerEl.querySelector(".desk-manual-input");
+          input == null ? void 0 : input.focus();
+          input == null ? void 0 : input.select();
+        }
+        async cancelManualTaskEdit() {
+          var _a;
+          (_a = this.containerEl.querySelector(".desk-manual-input")) == null ? void 0 : _a.blur();
+          this.manualTaskDraft = "";
+          this.manualTaskEditId = "";
+          await this.rerender();
         }
         /** Toggle a checkbox in its source file, then refresh. */
         async toggleTask(task) {
@@ -3097,6 +3341,8 @@ ${body}
           return registry.layout(ids, this.columnCount());
         }
         async render({ preserveScroll = false } = {}) {
+          if (this.deferWhileEditing()) return;
+          this.pendingEditorRender = false;
           if (this.rendering) {
             this.pendingRender = true;
             return;
@@ -3125,6 +3371,8 @@ ${body}
               now
             };
             const paneWidth = this.paneWidth();
+            const topGallery = this.plugin.settings.galleryMode !== "grid" ? cards.find((card) => card.id === "gallery") : null;
+            const gridCards = topGallery ? registry.layout(cards.filter((card) => card.id !== "gallery").map((card) => card.id), cols) : cards;
             const root = div({
               cls: "desk-root",
               attr: {
@@ -3136,6 +3384,7 @@ ${body}
               div({ cls: "desk-wash desk-wash-three" }),
               el("main", { cls: "desk-shell" }, [
                 this.renderHero(ctx),
+                topGallery ? this.renderTopGallery(topGallery, ctx) : null,
                 this.renderDock(ctx),
                 el("section", {
                   cls: "desk-grid",
@@ -3146,13 +3395,14 @@ ${body}
                     "--desk-cols": String(cols),
                     "--desk-card-max": `${maxVh}vh`
                   }
-                }, cards.map((card) => this.renderCard(card, ctx))),
+                }, gridCards.map((card) => this.renderCard(card, ctx))),
                 this.renderFooter(ctx)
               ]),
               this.renderItemVault(),
               this.renderDiagnostics(ctx),
               this.renderTextPreview()
             ]);
+            if (this.deferWhileEditing()) return;
             fill(container, root);
             if (preserveScroll) {
               container.scrollTop = outerTop;
@@ -3171,6 +3421,14 @@ ${body}
           }
         }
         /** One card, wrapped in its article shell. Errors are contained per card. */
+        renderTopGallery(card, ctx) {
+          try {
+            return el("section", { cls: "desk-gallery-top" }, card.render(ctx));
+          } catch (error) {
+            console.error("[desk] banner failed to render", error);
+            return el("section", { cls: "desk-gallery-top" }, ui.empty("\u56FE\u7247\u6682\u65F6\u65E0\u6CD5\u663E\u793A\u3002"));
+          }
+        }
         renderCard(card, ctx) {
           const cls = [
             "desk-card",
@@ -3291,25 +3549,50 @@ ${body}
           this.galleryTimer = window.setInterval(() => {
             if (typeof document !== "undefined" && document.hidden) return;
             this.galleryPage = (this.galleryPage + 1) % pages;
-            this.rerender();
+            if (!this.paintGalleryPage()) this.rerender();
           }, seconds * 1e3);
         }
         shiftGalleryPage(delta, pages) {
           if (pages <= 1) return;
           this.galleryPage = (this.galleryPage + delta + pages) % pages;
           this.clearGalleryRotation();
-          this.rerender();
+          if (this.paintGalleryPage()) this.configureGalleryRotation(pages, 1);
+          else this.rerender();
+        }
+        paintGalleryPage() {
+          const root = this.containerEl.querySelector(".desk-carousel");
+          if (!root) return false;
+          const slides = root.querySelectorAll("[data-slide-index]");
+          slides.forEach((slide, index) => {
+            const active = index === this.galleryPage;
+            slide.classList.toggle("is-active", active);
+            slide.setAttribute("aria-hidden", active ? "false" : "true");
+            slide.tabIndex = active ? 0 : -1;
+          });
+          root.querySelectorAll("[data-carousel-dot]").forEach((dot, index) => {
+            dot.classList.toggle("is-active", index === this.galleryPage);
+            dot.setAttribute("aria-pressed", index === this.galleryPage ? "true" : "false");
+          });
+          root.querySelector(".desk-carousel-status").textContent = this.galleryPage + 1 + " / " + slides.length;
+          const paused = this.galleryPaused || this.plugin.settings.galleryAutoRotate === false;
+          const pause = root.querySelector(".desk-carousel-pause");
+          pause.textContent = paused ? "\u25B6" : "\u2161";
+          pause.title = paused ? "\u7EE7\u7EED\u8F6E\u64AD" : "\u6682\u505C\u8F6E\u64AD";
+          pause.setAttribute("aria-label", pause.title);
+          return true;
         }
         async toggleGalleryRotation() {
           if (this.plugin.settings.galleryAutoRotate === false) {
             this.plugin.settings.galleryAutoRotate = true;
             this.galleryPaused = false;
-            await this.plugin.saveSettings();
+            await this.plugin.saveData(this.plugin.settings);
           } else {
             this.galleryPaused = !this.galleryPaused;
           }
           this.clearGalleryRotation();
-          this.rerender();
+          if (this.paintGalleryPage()) {
+            this.configureGalleryRotation(this.containerEl.querySelectorAll(".desk-carousel-slide").length, 1);
+          } else this.rerender();
         }
         itemStates() {
           const normalized = itemState.normalizeItemStates(this.plugin.settings.itemStates);
@@ -3346,10 +3629,19 @@ ${body}
           return visibility.hidden;
         }
         async closeItem(item) {
+          const previous = this.plugin.settings.itemStates;
           this.plugin.settings.itemStates = itemState.closeItem(this.itemStates(), item, /* @__PURE__ */ new Date());
-          await this.plugin.saveSettings();
+          try {
+            await this.plugin.saveData(this.plugin.settings);
+          } catch (error) {
+            this.plugin.settings.itemStates = previous;
+            this.notice("\u79FB\u9664\u4FDD\u5B58\u5931\u8D25\uFF0C\u6761\u76EE\u4ECD\u4FDD\u7559\uFF1A" + error.message);
+            return false;
+          }
+          await this.plugin.refreshViews();
           this.notice("\u5DF2\u79FB\u5165 Desk \u56DE\u6536\u7AD9\uFF1B\u4E0D\u4F1A\u5220\u9664\u6E90\u6587\u4EF6");
           await this.rerender();
+          return true;
         }
         async restoreItem(key) {
           this.plugin.settings.itemStates = itemState.restoreItem(this.itemStates(), key);
@@ -3452,9 +3744,11 @@ ${body}
             ["Vault Markdown", vaultMarkdown],
             ["\u8FDB\u5165\u6A21\u578B", model.files.length],
             ["\u539F\u59CB\u672A\u5B8C\u6210", model.allOpenCount],
-            ["\u89C4\u5219\u8FC7\u6EE4", model.hiddenCount],
-            ["\u6765\u6E90\u9650\u6D41", model.cappedCount],
-            ["\u6709\u6548\u5F85\u529E", model.openTasks.length],
+            ["\u53F0\u5386\u89C4\u5219\u8FC7\u6EE4", model.hiddenCount],
+            ["\u53F0\u5386\u6765\u6E90\u9650\u6D41", model.cappedCount],
+            ["\u53F0\u5386\u5019\u9009\u590D\u9009\u6846", model.openTasks.length],
+            ["\u5F85\u529E\u6587\u4EF6", this.taskBoardCounts(model).files],
+            ["\u4E2A\u4EBA\u5F85\u529E", this.taskBoardCounts(model).personal],
             ["\u4EE3\u7801\u5757", model.code ? model.code.blocks : "\u672A\u542F\u7528"],
             ["\u5F85\u5904\u7406", model.digest ? model.digest.length : "\u672A\u542F\u7528"],
             ["\u6700\u8FD1\u9879\u76EE", model.recent ? model.recent.length : "\u672A\u542F\u7528"],
@@ -3485,6 +3779,13 @@ ${body}
             el("p", { cls: "desk-recycle-note", text: "\u201C\u672A\u914D\u7F6E\u201D\u4E0E\u201C\u5DF2\u914D\u7F6E\u4F46\u6CA1\u6709\u6570\u636E\u201D\u662F\u4E0D\u540C\u72B6\u6001\u3002\u8BCA\u65AD\u53EA\u8BFB\u53D6\u7EDF\u8BA1\uFF0C\u4E0D\u4FEE\u6539\u4EFB\u4F55\u7B14\u8BB0\u3002" })
           ])]);
         }
+        taskBoardCounts(model) {
+          const visible = (item) => !itemState.itemVisibility(this.plugin.settings.itemStates, item).hidden;
+          return {
+            files: groupTaskFiles(model.tasks, this.plugin.settings).filter((file) => visible(taskFileItem(file))).length,
+            personal: normalizeManualTasks(this.plugin.settings.manualTasks).filter((task) => !task.done && visible(manualTaskItem(task))).length
+          };
+        }
         renderHero(ctx) {
           const { model, settings, now } = ctx;
           const today = dateKey(now);
@@ -3498,6 +3799,7 @@ ${body}
             return due && due <= today;
           }).length;
           const stale = (model.active || []).filter((stream) => stream.stale).length;
+          const taskBoard = this.taskBoardCounts(model);
           const template = registry.TEMPLATES.find((item) => item.id === (settings.template || "general"));
           const heroImage = this.resolveHeroImage(settings.heroImage);
           return el("header", {
@@ -3524,8 +3826,8 @@ ${body}
               div({ cls: "desk-pills" }, [
                 span({ cls: dueToday ? "is-warn" : "", text: `${dueToday} \u6761\u5230\u671F` }),
                 span({ cls: stale ? "is-warn" : "", text: `${stale} \u6761\u505C\u6EDE` }),
-                span({ text: `${model.openTasks.length} \u6761\u5F85\u529E` }),
-                model.hiddenCount ? span({ cls: "is-muted", text: `\u5DF2\u6EE4 ${model.hiddenCount}` }) : null
+                span({ text: `${taskBoard.personal} \u6761\u4E2A\u4EBA\u5F85\u529E` }),
+                span({ text: `${taskBoard.files} \u4EFD\u5F85\u529E\u6587\u4EF6` })
               ])
             ])
           ]);
@@ -3574,8 +3876,9 @@ ${body}
         }
         renderFooter(ctx) {
           const { model } = ctx;
+          const taskBoard = this.taskBoardCounts(model);
           const bits = [
-            `${model.openTasks.length} \u5F85\u529E`,
+            `${taskBoard.personal} \u4E2A\u4EBA\u5F85\u529E \xB7 ${taskBoard.files} \u4EFD\u5F85\u529E\u6587\u4EF6`,
             model.active ? `${model.active.length} \u6761\u5728\u98DE` : null,
             model.code ? `${model.code.blocks} \u4E2A\u4EE3\u7801\u5757` : null,
             model.scanMs ? `\u626B\u63CF ${model.scanMs}ms` : null
@@ -3618,11 +3921,11 @@ var require_settingtab = __commonJS({
     ];
     var NUMBER_FIELDS = [
       ["staleDays", "\u505C\u6EDE\u9608\u503C\uFF08\u5929\uFF09", "\u8FDB\u884C\u4E2D\u7684\u7EBF\u8D85\u8FC7\u8FD9\u4E2A\u5929\u6570\u6CA1\u52A8\u5C31\u6807\u7EA2"],
-      ["taskLimit", "\u5F85\u529E\u663E\u793A\u6761\u6570", "\u5F85\u529E\u5361\u7247\u6700\u591A\u663E\u793A\u591A\u5C11\u6761"],
+      ["taskLimit", "\u5F85\u529E\u6587\u4EF6\u663E\u793A\u6570", "\u6587\u4EF6\u5217\u8868\u521D\u59CB\u663E\u793A\u6570\uFF0C\u6BCF\u6B21\u70B9\u663E\u793A\u66F4\u591A\u8FFD\u52A0\u540C\u6837\u6570\u91CF"],
       ["heatWeeks", "\u70ED\u529B\u56FE\u5468\u6570", "\u4EA7\u51FA\u70ED\u529B\u56FE\u7EDF\u8BA1\u591A\u5C11\u5468"],
-      ["taskMaxAgeDays", "\u5F85\u529E\u6700\u5927\u5929\u6570", "\u6240\u5728\u6587\u4EF6\u8D85\u8FC7\u8FD9\u4E2A\u5929\u6570\u6CA1\u6539\u52A8\u5C31\u4E0D\u5F53\u5F85\u529E\uFF1B\u5E26\u5230\u671F\u65E5\u7684\u9664\u5916\u3002\u8BBE 0 \u5173\u95ED"],
-      ["taskMinLength", "\u5F85\u529E\u6700\u77ED\u5B57\u6570", "\u77ED\u4E8E\u8FD9\u4E2A\u957F\u5EA6\u7684\u590D\u9009\u6846\u6587\u672C\u5FFD\u7565"],
-      ["taskPerSource", "\u540C\u4E00\u7B14\u8BB0\u6700\u591A\u51E0\u6761", "\u9632\u6B62\u4E00\u4E2A\u5927\u8BA1\u5212\u7B14\u8BB0\u6324\u6389\u5176\u5B83\u9879\u76EE\uFF1B\u5E26\u5230\u671F\u65E5\u7684\u4E0D\u53D7\u9650\u3002\u8BBE 0 \u5173\u95ED"],
+      ["taskMaxAgeDays", "\u53F0\u5386\u4EFB\u52A1\u6700\u5927\u5929\u6570", "\u4EC5\u5F71\u54CD\u53F0\u5386\u5019\u9009\u4EFB\u52A1\uFF1B\u5F85\u529E\u6587\u4EF6\u8BA1\u6570\u4E0D\u6309\u5929\u6570\u9690\u85CF\u3002\u8BBE 0 \u5173\u95ED"],
+      ["taskMinLength", "\u53F0\u5386\u4EFB\u52A1\u6700\u77ED\u5B57\u6570", "\u4EC5\u5F71\u54CD\u53F0\u5386\u5019\u9009\u4EFB\u52A1\uFF1B\u5F85\u529E\u6587\u4EF6\u8BA1\u6570\u4FDD\u7559\u6240\u6709\u89E3\u6790\u51FA\u7684\u672A\u5B8C\u6210\u9879"],
+      ["taskPerSource", "\u53F0\u5386\u540C\u4E00\u7B14\u8BB0\u4E0A\u9650", "\u4EC5\u5F71\u54CD\u53F0\u5386\u5019\u9009\u4EFB\u52A1\uFF1B\u5F85\u529E\u6587\u4EF6\u59CB\u7EC8\u663E\u793A\u5B8C\u6574\u8BA1\u6570\u3002\u8BBE 0 \u5173\u95ED"],
       ["reviewMinDays", "\u590D\u4E60\u95F4\u9694\uFF08\u5929\uFF09", "\u5B66\u4E60\u6A21\u677F\u7528\uFF1A\u8D85\u8FC7\u8FD9\u4E2A\u5929\u6570\u6CA1\u6253\u5F00\u7684\u7B14\u8BB0\u8FDB\u590D\u4E60\u961F\u5217"]
     ];
     function makeSettingTab({ PluginSettingTab, Setting, Notice }) {
@@ -3698,7 +4001,11 @@ var require_settingtab = __commonJS({
             await this.save();
           }));
           containerEl.createEl("h3", { text: "\u753B\u9762\u5899" });
-          new Setting(containerEl).setName("\u753B\u5E45\u6BD4\u4F8B").setDesc("\u7AD6\u5E45\u9002\u5408\u63D2\u753B\u548C\u6D77\u62A5\uFF0C\u6A2A\u5E45\u9002\u5408\u622A\u56FE\u548C\u7F51\u9875\u7A3F\uFF0C\u65B9\u5F62\u9002\u5408\u6DF7\u653E\u3002").addDropdown((dropdown) => {
+          new Setting(containerEl).setName("\u5C55\u793A\u65B9\u5F0F").addDropdown((dropdown) => dropdown.addOption("slideshow", "\u5355\u56FE\u8F6E\u64AD").addOption("grid", "\u591A\u56FE\u7F51\u683C").setValue(this.plugin.settings.galleryMode || "slideshow").onChange(async (value) => {
+            this.plugin.settings.galleryMode = value;
+            await this.save();
+          }));
+          new Setting(containerEl).setName("\u753B\u5E45\u6BD4\u4F8B").setDesc("\u4EC5\u591A\u56FE\u7F51\u683C\u4F7F\u7528\u3002\u5355\u56FE\u8F6E\u64AD\u4FDD\u7559\u56FE\u7247\u5B8C\u6574\u5185\u5BB9\u3002").addDropdown((dropdown) => {
             dropdown.addOption("portrait", "\u7AD6\u5E45 3:4");
             dropdown.addOption("square", "\u65B9\u5F62 1:1");
             dropdown.addOption("landscape", "\u6A2A\u5E45 4:3");
@@ -3708,11 +4015,11 @@ var require_settingtab = __commonJS({
               await this.save();
             });
           });
-          new Setting(containerEl).setName("\u663E\u793A\u5F20\u6570").setDesc("\u4E00\u5C4F\u653E\u51E0\u5F20\u3002\u5F20\u6570\u8D8A\u5C11\u6BCF\u5F20\u8D8A\u5927\u3002").addSlider((slider) => slider.setLimits(3, 12, 1).setValue(Number(this.plugin.settings.galleryCount) || 6).setDynamicTooltip().onChange(async (value) => {
+          new Setting(containerEl).setName("\u663E\u793A\u5F20\u6570").setDesc("\u4EC5\u591A\u56FE\u7F51\u683C\u4F7F\u7528\u3002\u5355\u56FE\u8F6E\u64AD\u6BCF\u6B21\u663E\u793A\u4E00\u5F20\uFF0C\u6240\u6709\u56FE\u7247\u90FD\u53EF\u5207\u6362\u3002").addSlider((slider) => slider.setLimits(3, 12, 1).setValue(Number(this.plugin.settings.galleryCount) || 6).setDynamicTooltip().onChange(async (value) => {
             this.plugin.settings.galleryCount = value;
             await this.save();
           }));
-          new Setting(containerEl).setName("\u81EA\u52A8\u8F6E\u64AD").setDesc("\u56FE\u7247\u8D85\u8FC7\u4E00\u5C4F\u65F6\u81EA\u52A8\u5207\u6362\u5230\u4E0B\u4E00\u7EC4\uFF0C\u4ECD\u53EF\u5728\u5361\u7247\u91CC\u6682\u505C\u6216\u624B\u52A8\u7FFB\u7EC4\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.galleryAutoRotate !== false).onChange(async (value) => {
+          new Setting(containerEl).setName("\u81EA\u52A8\u8F6E\u64AD").setDesc("\u81EA\u52A8\u5207\u6362\u56FE\u7247\uFF0C\u53EF\u5728\u5361\u7247\u91CC\u6682\u505C\u6216\u624B\u52A8\u5207\u6362\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.galleryAutoRotate !== false).onChange(async (value) => {
             this.plugin.settings.galleryAutoRotate = value;
             await this.save();
           }));
@@ -3819,9 +4126,7 @@ ${applied.map(([key, value]) => `\xB7 ${value}`).join("\n")}` : "\u6CA1\u6709\u8
           containerEl.createEl("h3", { text: "\u5F85\u529E\u8FC7\u6EE4" });
           [
             ["taskExcludes", "\u5F85\u529E\u6392\u9664\u8BCD", "\u9017\u53F7\u5206\u9694\u3002\u8DEF\u5F84\u542B\u4EFB\u4E00\u7247\u6BB5\u7684\u6587\u4EF6\u4E0D\u5F53\u5F85\u529E\u6765\u6E90"],
-            ["noteExcludes", "\u7B14\u8BB0\u6392\u9664\u8BCD", "\u9017\u53F7\u5206\u9694\u3002\u673A\u5668\u751F\u6210\u7684\u8BB0\u8D26\u6587\u4EF6\u4E0D\u7B97\u300C\u6211\u5728\u505A\u7684\u4E8B\u300D"],
-            ["myNames", "\u6211\u7684\u79F0\u547C", "\u9017\u53F7\u5206\u9694\u3002\u300C\u59D3\u540D\uFF1A\u300D\u524D\u7F00\u547D\u4E2D\u8FD9\u4E9B\u540D\u5B57\u7684\u7B97\u6211\u7684\u5F85\u529E"],
-            ["teamNames", "\u4ED6\u4EBA\u79F0\u547C", "\u9017\u53F7\u5206\u9694\u3002\u5E26\u8FD9\u4E9B\u540D\u5B57\u4E14\u662F\u300C\u7B49 X \u786E\u8BA4\u300D\u7C7B\u53E5\u5F0F\u7684\u5F52\u5230\u300C\u7B49\u4EBA\u300D"]
+            ["noteExcludes", "\u7B14\u8BB0\u6392\u9664\u8BCD", "\u9017\u53F7\u5206\u9694\u3002\u673A\u5668\u751F\u6210\u7684\u8BB0\u8D26\u6587\u4EF6\u4E0D\u7B97\u300C\u6211\u5728\u505A\u7684\u4E8B\u300D"]
           ].forEach(([key, name, desc]) => {
             new Setting(containerEl).setName(name).setDesc(desc).addTextArea((area) => {
               var _a;
@@ -3845,6 +4150,7 @@ var require_plugin = __commonJS({
   "src/plugin.js"(exports2, module2) {
     "use strict";
     var { DEFAULTS } = require_settings();
+    var { normalizeManualTasks } = require_task_board();
     var { detectLayout } = require_settings();
     var { makeView, VIEW_TYPE } = require_view();
     var { makeSettingTab } = require_settingtab();
@@ -3891,6 +4197,7 @@ var require_plugin = __commonJS({
           });
           const isFresh = Object.keys(saved).length === 0;
           this.settings = Object.assign({}, DEFAULTS, saved);
+          this.settings.manualTasks = normalizeManualTasks(this.settings.manualTasks);
           this.settings.firstRun = isFresh;
           if (isFresh) {
             this.settings.cards = registry.templateCards(this.settings.template).join(", ");
@@ -3950,18 +4257,20 @@ var require_plugin = __commonJS({
         /** Quick actions adapt to which folders this vault actually has. */
         quickActions() {
           const actions = [];
-          if (this.settings.dailyFolder) {
+          const folderExists = (path) => {
+            const node = path && this.app.vault.getAbstractFileByPath(normalizePath(path));
+            return Boolean(node && node.children);
+          };
+          if (folderExists(this.settings.dailyFolder)) {
             actions.push({ id: "daily-report", label: "\u5199\u4ECA\u5929\u7684\u65E5\u62A5", desc: "\u6253\u5F00\u6216\u65B0\u5EFA\u5F53\u5929\u65E5\u62A5" });
             actions.push({ id: "daily-draft", label: "\u4ECA\u5929\u7684\u8349\u7A3F\u7BB1", desc: "\u5B9A\u4F4D\u5F53\u5929 drafts \u76EE\u5F55" });
           }
-          if (this.settings.activeFolder) {
+          if (folderExists(this.settings.activeFolder)) {
             actions.push({ id: "open-active", label: "\u8FDB\u884C\u4E2D\u7684\u7EBF", desc: "\u8DE8\u5929\u672A\u95ED\u73AF\u7684\u5DE5\u4F5C" });
           }
-          if (this.settings.inboxFolder) {
+          if (folderExists(this.settings.inboxFolder)) {
             actions.push({ id: "open-inbox", label: "\u6536\u4EF6\u7BB1", desc: "\u5F85\u5F52\u7C7B\u7684\u6750\u6599" });
           }
-          actions.push({ id: "git-sync", label: "Git \u540C\u6B65", desc: "\u8C03\u7528 obsidian-git \u63D0\u4EA4\u5E76\u63A8\u9001" });
-          actions.push({ id: "terminal", label: "\u6253\u5F00\u7EC8\u7AEF", desc: "\u8C03\u7528 terminal \u63D2\u4EF6" });
           return actions;
         }
         /** Path of the day folder: <daily>/YYYY-MM/YYYY-MM-DD */
@@ -4024,14 +4333,6 @@ var require_plugin = __commonJS({
           }
           if (id === "open-inbox") {
             this.revealFolder(this.settings.inboxFolder);
-            return void 0;
-          }
-          if (id === "git-sync") {
-            this.invokeCommand(/^obsidian-git:.*(sync|Sync)/, "obsidian-git \u672A\u542F\u7528");
-            return void 0;
-          }
-          if (id === "terminal") {
-            this.invokeCommand(/^terminal:.*(integrated|current)/, "terminal \u63D2\u4EF6\u672A\u542F\u7528");
             return void 0;
           }
           return void 0;

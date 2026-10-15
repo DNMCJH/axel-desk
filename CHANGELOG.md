@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.0-rc.7 — 2026-10-15
+
+- Isolate banner images from host note-image margins, rounded corners and shadows; render images edge-to-edge with no decorative border.
+- Refresh the banner caption and default daily message with original Chinese copy.
+- Test banner image coverage using the user's actual Obsidian core CSS, Things theme and enabled snippets, not plugin-only styles.
+
+## 0.2.0-rc.6 — 2026-10-15
+
+- Render the enabled single-image carousel immediately after the page header, outside the regular card grid regardless of saved card order.
+- Restore the reference banner composition: panoramic cover image, reference focal positions, lower-left typography, lower-right aligned arrows/dots/pause and top-corner image controls.
+- Keep manual/automatic image switching local to the banner, preserving editors and all existing task-board behavior.
+
+## 0.2.0-rc.5 — 2026-10-14
+
+- Remove unconditional Git/terminal actions; only explicitly configured existing folders produce quick entries.
+- Add local single-image slideshow with previous/next/dots/pause; retain optional image grid.
+- Switch slideshow images without rebuilding the page or disconnecting editors.
+- Reference images are installed separately for personal use, not bundled or fetched by the plugin.
+
+## 0.2.0-rc.4 — 2026-10-12
+
+- Replace inferred task ownership tabs with personal tasks and removable source-file summaries.
+- Preserve full file names/relative paths and uncapped checkbox counts; exclude historical/template sources.
+- Keep removed files hidden across refresh/restart/source edits until restored; never modify source notes.
+- Add personal task add/edit/complete/reopen/remove with persistence failure handling and IME protection.
+- Defer background full redraws while the scratchpad or task entry has focus.
+
+
 ## 0.2.0-rc.3
 
 - Visual containment batch: keep gallery picker controls inside split panes.

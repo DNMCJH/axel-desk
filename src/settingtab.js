@@ -25,11 +25,11 @@ const TEXT_FIELDS = [
 
 const NUMBER_FIELDS = [
   ['staleDays', '停滞阈值（天）', '进行中的线超过这个天数没动就标红'],
-  ['taskLimit', '待办显示条数', '待办卡片最多显示多少条'],
+  ['taskLimit', '待办文件显示数', '文件列表初始显示数，每次点显示更多追加同样数量'],
   ['heatWeeks', '热力图周数', '产出热力图统计多少周'],
-  ['taskMaxAgeDays', '待办最大天数', '所在文件超过这个天数没改动就不当待办；带到期日的除外。设 0 关闭'],
-  ['taskMinLength', '待办最短字数', '短于这个长度的复选框文本忽略'],
-  ['taskPerSource', '同一笔记最多几条', '防止一个大计划笔记挤掉其它项目；带到期日的不受限。设 0 关闭'],
+  ['taskMaxAgeDays', '台历任务最大天数', '仅影响台历候选任务；待办文件计数不按天数隐藏。设 0 关闭'],
+  ['taskMinLength', '台历任务最短字数', '仅影响台历候选任务；待办文件计数保留所有解析出的未完成项'],
+  ['taskPerSource', '台历同一笔记上限', '仅影响台历候选任务；待办文件始终显示完整计数。设 0 关闭'],
   ['reviewMinDays', '复习间隔（天）', '学习模板用：超过这个天数没打开的笔记进复习队列'],
 ];
 
@@ -141,8 +141,18 @@ function makeSettingTab({ PluginSettingTab, Setting, Notice }) {
 
       containerEl.createEl('h3', { text: '画面墙' });
       new Setting(containerEl)
+        .setName('展示方式')
+        .addDropdown((dropdown) => dropdown
+          .addOption('slideshow', '单图轮播')
+          .addOption('grid', '多图网格')
+          .setValue(this.plugin.settings.galleryMode || 'slideshow')
+          .onChange(async (value) => {
+            this.plugin.settings.galleryMode = value;
+            await this.save();
+          }));
+      new Setting(containerEl)
         .setName('画幅比例')
-        .setDesc('竖幅适合插画和海报，横幅适合截图和网页稿，方形适合混放。')
+        .setDesc('仅多图网格使用。单图轮播保留图片完整内容。')
         .addDropdown((dropdown) => {
           dropdown.addOption('portrait', '竖幅 3:4');
           dropdown.addOption('square', '方形 1:1');
@@ -155,7 +165,7 @@ function makeSettingTab({ PluginSettingTab, Setting, Notice }) {
         });
       new Setting(containerEl)
         .setName('显示张数')
-        .setDesc('一屏放几张。张数越少每张越大。')
+        .setDesc('仅多图网格使用。单图轮播每次显示一张，所有图片都可切换。')
         .addSlider((slider) => slider
           .setLimits(3, 12, 1)
           .setValue(Number(this.plugin.settings.galleryCount) || 6)
@@ -166,7 +176,7 @@ function makeSettingTab({ PluginSettingTab, Setting, Notice }) {
           }));
       new Setting(containerEl)
         .setName('自动轮播')
-        .setDesc('图片超过一屏时自动切换到下一组，仍可在卡片里暂停或手动翻组。')
+        .setDesc('自动切换图片，可在卡片里暂停或手动切换。')
         .addToggle((toggle) => toggle
           .setValue(this.plugin.settings.galleryAutoRotate !== false)
           .onChange(async (value) => {
@@ -312,8 +322,7 @@ function makeSettingTab({ PluginSettingTab, Setting, Notice }) {
       [
         ['taskExcludes', '待办排除词', '逗号分隔。路径含任一片段的文件不当待办来源'],
         ['noteExcludes', '笔记排除词', '逗号分隔。机器生成的记账文件不算「我在做的事」'],
-        ['myNames', '我的称呼', '逗号分隔。「姓名：」前缀命中这些名字的算我的待办'],
-        ['teamNames', '他人称呼', '逗号分隔。带这些名字且是「等 X 确认」类句式的归到「等人」'],
+
       ].forEach(([key, name, desc]) => {
         new Setting(containerEl)
           .setName(name)
